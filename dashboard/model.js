@@ -79,7 +79,7 @@
   function quantile(s, q) { if (!s.length) return 0; var at = (s.length - 1) * q, lo = Math.floor(at), hi = Math.ceil(at); return s[lo] + (s[hi] - s[lo]) * (at - lo); }
   function med(v) { return quantile(v.slice().sort(function (a, b) { return a - b; }), 0.5); }
   function group(v) { var s = v.slice().sort(function (a, b) { return a - b; }); return { n: s.length, median: quantile(s, 0.5), q25: quantile(s, 0.25), q75: quantile(s, 0.75) }; }
-  /** Least squares of y on [1, ...feats] by the normal equations (Gaussian elimination, partial pivoting). */
+  /** Least squares of y on [1, ...feats]: normal equations, Gaussian elimination. */
   function lsq(rows, feats) {
     var k = feats.length + 1, A = [], b = [], i, j, r;
     for (i = 0; i < k; i++) { A.push([]); b.push(0); for (j = 0; j < k; j++) A[i].push(0); }
@@ -93,7 +93,7 @@
     return w;
   }
   function predict(w, feats, f) { return feats.reduce(function (t, n, q) { return t + w[q + 1] * f[n]; }, w[0]); }
-  /** Category premium of family i from the others' residuals: the category's median shrunk to its sector's, the sector's to zero. */
+  /** Category premium from the other families' residuals: category median shrunk to sector's, sector's to 0. */
   function premium(rows, resid, cat, skip) {
     var sec = [], own = [];
     rows.forEach(function (r, j) { if (j === skip) return; if (sectorOf(r.category) === sectorOf(cat)) sec.push(resid[j]); if (r.category === cat) own.push(resid[j]); });
@@ -189,10 +189,8 @@
       spread: { q25: r3(cat.q25 - cat.median), q75: r3(cat.q75 - cat.median) } };
   }
 
-  /* ---------- 6. farm economics: is a position worth its costs? ----------
-     slice = users' share x value-if-launched x position / TVL;  expected = slice x odds of a launch within 12
-     months (points earned while held still count when the token comes after the hold);  net = expected - gas
-     and fees - the T-bill yield the position gives up while it is held. */
+  /* ---------- 6. farm economics: net = users' share x value if launched x position / TVL x 12-month odds
+     (points earned while held count if the token comes later) - gas - fees - T-bill yield while held ---------- */
   var USER_SHARE = 0.07, TBILL = 0.04;
   function farm(m, p, v, flagCount, position, weeks, costs) {
     var h = weeks / 52, ageUsed = v.age === null ? 2 : v.age / 365;

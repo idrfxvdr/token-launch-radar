@@ -88,7 +88,7 @@
   }
   function lx(v, w) { return (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * w; }
   function rangeBar(r) {
-    var w = 120, a = lx(r.lo, w), b = lx(r.hi, w), m = lx(r.b, w);
+    var w = 90, a = lx(r.lo, w), b = lx(r.hi, w), m = lx(r.b, w);
     return '<svg width="' + w + '" height="10" aria-hidden="true"><rect x="0" y="4" width="' + w + '" height="2" fill="var(--line)"/><rect x="' + a.toFixed(1) + '" y="2" width="' + Math.max(2, b - a).toFixed(1) + '" height="6" rx="3" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width=".8"/><rect x="' + (m - 1).toFixed(1) + '" y="0" width="2.4" height="10" fill="var(--accent)"/></svg>';
   }
 
@@ -133,13 +133,13 @@
     var body = list.map(function (r) {
       return '<tr tabindex="0" data-p="' + esc(r.s) + '"><td class="n">' + r.r + '</td>' +
         '<td><span class="pname">' + esc(r.n) + '</span>' + (r.w ? '<span class="tag w" title="On the house watchlist">WL</span>' : '') + (r.fl.length ? '<span class="tag f" title="' + esc(r.fl.join('; ')) + '">⚑ flag</span>' : '') + '</td>' +
-        '<td class="hide-sm">' + esc(r.c) + '</td>' +
-        '<td class="hide-md chainlist">' + esc(r.ch.slice(0, 2).join(', ')) + (r.ch.length > 2 ? ' +' + (r.ch.length - 2) : '') + '</td>' +
+        '<td class="hide-sm cat" title="' + esc(r.c) + '">' + esc(r.c) + '</td>' +
+        '<td class="hide-md chainlist">' + esc(r.ch[0] || '') + (r.ch.length > 1 ? ' +' + (r.ch.length - 1) : '') + '</td>' +
         '<td class="n"><div class="tvl"><span>' + usd(r.tvl) + '</span>' + trend(r) + '<span class="d7 ' + (r.d7 === null ? 'muted' : r.d7 >= 0 ? 'up' : 'down') + '">' + pct(r.d7) + '</span></div></td>' +
         '<td class="n hide-sm nw"><b>' + Math.round(r.od * 100) + '%</b> <span class="muted">' + (r.age === null ? 'age n/a' : (r.age / 365).toFixed(1) + 'y') + '</span></td>' +
         '<td><div class="range"><span class="hide-sm">' + rangeBar(r) + '</span><b>' + usd(r.b) + '</b><small>' + usd(r.lo) + ' – ' + usd(r.hi) + ' · if launched ' + usd(r.ifl) + '</small></div></td>' +
         '<td class="n hide-sm nw"><span class="meter"><i style="width:' + r.conf + '%"></i></span>' + r.conf + '</td>' +
-        '<td>' + pill(r.pr) + '</td></tr>';
+        '<td class="nw">' + pill(r.pr) + '<small class="net ' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + ' net</small></td></tr>';
     }).join('');
     return kpis() +
       '<p class="howto"><b>How to read it:</b> implied value = what a token would be worth if launched (a size curve fitted on the ' + R.fit.n + ' traded token families here, plus a category premium) × the fitted odds it launches within 12 months, which rise with the time it has run with no token. Every term was tested blind: ' + R.tests.filter(function (t) { return t.name.charAt(0) === '+'; }).map(function (t) { return t.name.slice(2) + (t.mae < R.tests[1].mae ? ' kept' : ' rejected'); }).join(', ') + ' (Method). Farm plans are netted for odds, gas, fees and T-bill yield.' +
@@ -154,7 +154,7 @@
       '<label class="muted"><input type="checkbox" id="w"' + (s.w ? ' checked' : '') + '> Watchlist only</label></form>' +
       '<div class="chips" aria-live="polite"><span class="muted"><b>' + list.length + ' of ' + rows.length + '</b> shown' + (s.w && list.length === R.counts.watchlist ? ' (all ' + R.counts.watchlist + ' watchlist protocols)' : '') + ' · ' + (chips.length ? 'filters:' : 'no filters') + '</span>' + chips.join('') + (chips.length ? '<button type="button" class="clear" data-unset="all">Clear all</button>' : '') + '</div>' +
       '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols ranked by implied launch value</caption><thead><tr>' +
-      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('od', '12-mo odds · age', 'n hide-sm') + th('b', 'Implied value = if launched × odds') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
+      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('od', '12-mo odds · age', 'n hide-sm') + th('b', 'Implied value = if launched × odds') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm · net') +
       '</tr></thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>';
   }
 
@@ -221,7 +221,7 @@
     try { done = JSON.parse(localStorage.getItem('radar-done-' + r.s) || '{}'); } catch (e) { done = {}; }
     panel.innerHTML =
       '<div class="phead"><div><div class="muted">#' + r.r + ' of ' + rows.length + ' · ' + esc(r.c) + ' · ' + esc(r.ch.slice(0, 4).join(', ')) + (r.ch.length > 4 ? ' +' + (r.ch.length - 4) + ' more' : '') + (r.w ? ' <span class="tag w">house watchlist</span>' : '') + '</div><h2 id="d-title">' + esc(r.n) + '</h2></div><button class="close" type="button" data-close>Close ✕</button></div>' +
-      '<div class="cols"><div><div class="grid2"><div class="card"><h3>Implied value</h3><div class="big">' + usd(r.b) + '</div><div class="muted">' + usd(r.ifl) + ' if launched × ' + Math.round(r.od * 100) + '% odds in 12 months · range ' + usd(r.lo) + ' – ' + usd(r.hi) + '</div><div style="margin-top:8px">' + r.dr.map(function (d) { return '<span class="tag">' + esc(d) + '</span>'; }).join(' ') + '</div></div>' +
+      '<div class="cols"><div><div class="grid2"><div class="card"><h3>Implied value</h3><div class="big">' + usd(r.b) + '</div><div class="chain">' + usd(r.tvl) + ' TVL → <b>' + usd(r.ifl) + '</b> if launched → × <b>' + Math.round(r.od * 100) + '%</b> odds → <b>' + usd(r.b) + '</b></div><div class="muted">range ' + usd(r.lo) + ' – ' + usd(r.hi) + '</div><div style="margin-top:8px">' + r.dr.map(function (d) { return '<span class="tag">' + esc(d) + '</span>'; }).join(' ') + '</div></div>' +
       '<div class="card"><h3>Confidence ' + r.conf + ' / 100 · ' + pill(r.pr) + '</h3><div class="muted" style="font-size:12px">' + r.cp.map(function (p) { return esc(p[0]) + ' <b style="color:var(--ink)">' + (p[1] >= 0 && p[0] !== 'start' ? '+' : '') + p[1] + '</b>'; }).join(' · ') + '</div><p style="margin:8px 0 0">' + esc(r.pw) + '</p></div></div>' +
       '<div class="card"><h3>Valuation: the arithmetic</h3>' + math(r) + '</div>' +
       '<div class="card"><h3>Against the tokenised market</h3>' + scatter(r) + '</div>' +

@@ -72,7 +72,11 @@ tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr:focus-visible { background: var(--sunk); outline: none; }
 td.n, th.n { text-align: right; }
 .nw { white-space: nowrap; }
-.pname { font-weight: 650; }
+.pname { font-weight: 650; white-space: nowrap; }
+td.cat { max-width: 128px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+small.net { display: block; font-size: 11px; margin-top: 2px; font-weight: 600; }
+.chain { font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
+.chain b { color: var(--ink); }
 .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); }
 .tag.w { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .tag.f { color: var(--warn); }
@@ -80,7 +84,7 @@ td.n, th.n { text-align: right; }
 .tvl { display: flex; align-items: center; gap: 8px; justify-content: flex-end; white-space: nowrap; }
 .d7 { font-size: 12px; min-width: 52px; text-align: right; }
 .up { color: var(--pos); } .down { color: var(--neg); }
-.range { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-width: 190px; }
+.range { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; min-width: 170px; }
 .range b { font-variant-numeric: tabular-nums; }
 .range small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
 .meter { display: inline-block; width: 46px; height: 6px; border-radius: 3px; background: var(--sunk); border: 1px solid var(--line); vertical-align: middle; margin-right: 6px; overflow: hidden; }
@@ -103,7 +107,7 @@ svg text { fill: var(--muted); font: 10px var(--sans); }
 .cols > div, .grid2 > *, .card { min-width: 0; }
 .card { overflow-x: auto; }
 @media (min-width: 1200px) { .cols { grid-template-columns: 1.1fr 1fr; align-items: start; } }
-.panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(1180px, 100%); background: var(--bg); overflow: auto; padding: 22px 24px 40px; box-shadow: var(--shadow); outline: none; }
+.panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(1440px, 100%); background: var(--bg); overflow: auto; padding: 22px 24px 40px; box-shadow: var(--shadow); outline: none; }
 .panel h2 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
 .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px; }
 .phead { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
