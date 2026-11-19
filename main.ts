@@ -15,8 +15,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classify, parseSnapshot, type Protocol } from './lib/classify.ts';
-import { Model, SECTORS, sectorOf, type Valuation } from './lib/value.ts';
+import { M, parseSnapshot, type Protocol, type Valuation } from './lib/model.ts';
 import { plan, stepText, USER_SHARE, type Plan } from './lib/plans.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
@@ -40,17 +39,17 @@ if (!existsSync(inputFile)) fail(`no snapshot at ${inputFile}: pass --input <sna
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snap = parseSnapshot(readFileSync(inputFile, 'utf8'));
-const verdicts = classify(snap);
-const model = new Model(snap);
+const verdicts = M.classify(snap);
+const model = M.fit(snap);
 const house = new Set(snap.watchlist);
 
 interface Scored { p: Protocol; v: Valuation; plan: Plan; sector: string; }
 const scored: Scored[] = snap.protocols
-  .filter((p) => verdicts.get(p.slug)!.status === 'candidate')
+  .filter((p) => verdicts[p.slug]!.status === 'candidate')
   .map((p) => {
-    const v = model.value(p, verdicts.get(p.slug)!);
-    const sector = sectorOf(p.category);
-    return { p, v, sector, plan: plan(p, v, verdicts.get(p.slug)!, sector) };
+    const v = M.value(model, p, verdicts[p.slug]!.flags.length);
+    const sector = M.sectorOf(p.category);
+    return { p, v, sector, plan: plan(p, v, verdicts[p.slug]!, sector) };
   })
   .sort((x, y) => y.v.base - x.v.base || (x.p.slug < y.p.slug ? -1 : 1));
 
@@ -71,7 +70,7 @@ const board = scored.map(({ p, v, plan: f, sector }, i) => ({
   change_7d: p.change_7d,
   listed_at: p.listed_at,
   on_watchlist: house.has(p.slug),
-  flags: verdicts.get(p.slug)!.flags,
+  flags: verdicts[p.slug]!.flags,
   drivers: v.drivers,
   per_1k_usd: f.per_1k,
   farm_steps: f.steps.map(stepText),
@@ -102,25 +101,27 @@ const radar = {
     protocols: snap.protocols.length,
     watchlist: snap.watchlist.length,
     candidates: board.length,
-    live: [...verdicts.values()].filter((x) => x.status === 'live').length,
-    excluded: [...verdicts.values()].filter((x) => x.status === 'excluded').length,
+    live: Object.values(verdicts).filter((x) => x.status === 'live').length,
+    excluded: Object.values(verdicts).filter((x) => x.status === 'excluded').length,
   },
-  fit: model.fit,
+  fit: { a: model.a, b: model.b, n: model.n, resid_sd: model.resid_sd, loo_mae: model.loo_mae },
   backtest: model.backtest,
   global: { q25: model.global.q25, median: model.global.median, q75: model.global.q75 },
-  k: 4,
+  k: M.K,
   user_share: USER_SHARE,
-  sectors: SECTORS,
+  sectors: M.SECTORS,
+  // The raw snapshot: the page refits dashboard/model.js on it and checks every implied value against this board.
+  snapshot: { as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd, watchlist: snap.watchlist, protocols: snap.protocols },
   rows: scored.map(({ p, v, plan: f, sector }, i) => ({
     r: i + 1, s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', sec: sector, ch: p.chains, tvl: p.tvl_usd, d7: p.change_7d,
-    at: p.listed_at, age: v.age_days, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, m: v.multiple, conf: v.confidence,
-    cp: v.confidence_parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts.get(p.slug)!.reason, fl: verdicts.get(p.slug)!.flags,
+    at: p.listed_at, age: v.age, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, m: v.multiple, conf: v.confidence,
+    cp: v.parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts[p.slug]!.reason, fl: verdicts[p.slug]!.flags,
     pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net,
     st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks,
   })),
-  comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
-  excluded: snap.protocols.filter((p) => verdicts.get(p.slug)!.status === 'excluded')
-    .map((p) => ({ s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', tvl: p.tvl_usd, why: verdicts.get(p.slug)!.reason })),
+  comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: M.sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
+  excluded: snap.protocols.filter((p) => verdicts[p.slug]!.status === 'excluded')
+    .map((p) => ({ s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', tvl: p.tvl_usd, why: verdicts[p.slug]!.reason })),
 };
 
 mkdirSync(out, { recursive: true });

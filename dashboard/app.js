@@ -44,6 +44,15 @@
 
   /* ---------- derived lists ---------- */
   var rows = R.rows;
+  /* Re-run model.js (the code that wrote board.json) on the raw snapshot, here in the browser, and check it. */
+  var check = (function () {
+    var M = window.RadarModel;
+    if (!M || !R.snapshot) return { ok: 0, n: rows.length, ran: false };
+    var fitted = M.fit(R.snapshot), verdicts = M.classify(R.snapshot), bySlug = {}, ok = 0;
+    R.snapshot.protocols.forEach(function (p) { bySlug[p.s || p.slug] = p; });
+    rows.forEach(function (r) { var v = M.value(fitted, bySlug[r.s], verdicts[r.s].flags.length); if (verdicts[r.s].status === 'candidate' && v.base === r.b && v.low === r.lo && v.high === r.hi) ok++; });
+    return { ok: ok, n: rows.length, ran: true, live: Object.keys(verdicts).filter(function (k) { return verdicts[k].status === 'live'; }).length };
+  })();
   var cats = uniq(rows.map(function (r) { return r.c; }));
   var chains = uniq([].concat.apply([], rows.map(function (r) { return r.ch; })));
   function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }).sort(); }
@@ -127,7 +136,8 @@
         '<td>' + pill(r.pr) + '</td></tr>';
     }).join('');
     return kpis() +
-      '<p class="howto"><b>How to read it:</b> rank = implied launch value, a size curve fitted on the ' + R.backtest.n + ' traded tokens in this snapshot (one per token family) plus a category premium. Blind test, each token left out and priced by the rest: off by ×' + Math.pow(10, R.backtest.full).toFixed(1) + ' typically vs ×' + Math.pow(10, R.backtest.flat).toFixed(1) + ' for a flat multiple. Each row opens its arithmetic, comparables and a farm plan netted to dollars. Traded tokens are under Already trading, not ranked.</p>' +
+      '<p class="howto"><b>How to read it:</b> rank = implied launch value, a size curve fitted on the ' + R.backtest.n + ' traded tokens in this snapshot (one per token family) plus a category premium. Blind test, each token left out and priced by the rest: off by ×' + Math.pow(10, R.backtest.full).toFixed(1) + ' typically vs ×' + Math.pow(10, R.backtest.flat).toFixed(1) + ' for a flat multiple. Each row opens its arithmetic, comparables and a farm plan netted to dollars. Traded tokens are under Already trading, not ranked.' +
+        (check.ran ? ' <span class="' + (check.ok === check.n ? 'up' : 'down') + '"><b>' + (check.ok === check.n ? '✓' : '✗') + ' model.js re-run in this browser: ' + check.ok + ' / ' + check.n + ' values match board.json.</b></span>' : '') + '</p>' +
       '<form class="filters" role="search" onsubmit="return false">' +
       '<input type="search" id="q" placeholder="Search protocol, category or chain" aria-label="Search" value="' + esc(s.q) + '">' +
       '<select id="cat" aria-label="Category">' + opts(cats, s.cat, 'All categories') + '</select>' +

@@ -6,11 +6,9 @@
 // users, pro rata to their share of TVL over the campaign. So $1,000 deposited is worth roughly
 // USER_SHARE * V * 1000 / TVL at launch, the "per $1k" figure every plan quotes.
 
-import type { Protocol, Verdict } from './classify.ts';
-import type { Valuation } from './value.ts';
+import { M, type Priority, type Protocol, type Valuation, type Verdict } from './model.ts';
 
 export const USER_SHARE = 0.07;
-export type Priority = 'farm now' | 'watch' | 'skip';
 
 /** One step: what to do, what it costs, how long it takes. */
 export interface Step { text: string; cost: string; time: string; when?: string; }
@@ -109,7 +107,7 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   // Size: a test ticket, then a position that scales with confidence (a capped $10k at 95).
   const ticket = cheap ? 250 : 1000;
   const full = Math.max(ticket * 2, Math.round((v.confidence / 95) * 10) * 1000);
-  const age = v.age_days;
+  const age = v.age;
   const weeks = age === null ? 16 : age < 180 ? 26 : age < 540 ? 16 : 12;
   const c7 = p.change_7d ?? 0;
   const x: Ctx = { p, v, chain, cheap, gas, ticket, full, weeks, per1k, c7, age };
@@ -144,12 +142,14 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   const drop = Math.round((per1k * full) / 1000);
   const net = drop - total;
 
-  let priority: Priority, why: string;
-  if (verdict.flags.length > 0) { priority = 'skip'; why = `Skip: ${verdict.flags[0]}.`; }
-  else if (v.confidence < 40) { priority = 'skip'; why = `Skip: confidence ${v.confidence}/100 is too low to commit capital on.`; }
-  else if (net <= 0) { priority = 'skip'; why = `Skip: ${usd(full)} would earn about $${drop} at launch against $${total} of gas and fees, a net loss.`; }
-  else if (v.confidence >= 55 && c7 > -12 && net >= Math.max(50, 2 * total)) { priority = 'farm now'; why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected at launch less $${total} gas and fees), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
-  else { priority = 'watch'; why = `Watch (thin): nets about $${net} on ${usd(full)}${c7 <= -12 ? ` and TVL fell ${c7.toFixed(1)}% in 7d` : v.confidence < 55 ? ` at confidence ${v.confidence}/100` : ''}; enter on a points announcement or a turn in TVL.`; }
+  // The rule itself is RadarModel.priority (dashboard/model.js); here it is put into words.
+  const priority: Priority = M.priority(verdict.flags.length, v.confidence, c7, net, total);
+  let why: string;
+  if (verdict.flags.length > 0) why = `Skip: ${verdict.flags[0]}.`;
+  else if (v.confidence < 40) why = `Skip: confidence ${v.confidence}/100 is too low to commit capital on.`;
+  else if (net <= 0) why = `Skip: ${usd(full)} would earn about $${drop} at launch against $${total} of gas and fees, a net loss.`;
+  else if (priority === 'farm now') { why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected at launch less $${total} gas and fees), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
+  else { why = `Watch (thin): nets about $${net} on ${usd(full)}${c7 <= -12 ? ` and TVL fell ${c7.toFixed(1)}% in 7d` : v.confidence < 55 ? ` at confidence ${v.confidence}/100` : ''}; enter on a points announcement or a turn in TVL.`; }
   const minutes = steps.reduce((s, st) => s + [...st.time.matchAll(/(\d+) min(?! a week)/g)].reduce((a, m) => a + Number(m[1]), 0), 0) + weeks * 10;
 
   const risks: string[] = [];
