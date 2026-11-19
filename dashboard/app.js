@@ -105,7 +105,13 @@
       k(usd(tvl), 'TVL with no token', R.counts.live + ' with a token kept off') +
       k(usd(val), 'implied launch value', 'sum of base cases') +
       k(String(now), 'farm now', 'of ' + rows.length + ' plans') +
-      k(esc(top[0]), 'top category by TVL', esc(top.slice(1).join(' · '))) + '</section>';
+      k(esc(top[0]), 'top category by TVL', esc(top.slice(1).join(' · '))) + '</section>' + split();
+  }
+  /* Every protocol in the snapshot, in one bar: ranked pre-token candidates, tokens that trade, products of a traded token. */
+  function split() {
+    var c = R.counts, all = c.protocols, parts = [['board', rows.length, 'pre-token candidates, ranked below', 'var(--accent)'], ['live', c.live, 'token already trades: comparables, not ranked', 'var(--pos)'], ['excluded', c.excluded, 'no token, but a product of a traded one', 'var(--peer)']];
+    return '<section class="split" aria-label="Where every protocol in the snapshot went"><div class="bar">' + parts.map(function (x) { return '<a href="#view=' + x[0] + '" style="flex:' + x[1] + ';background:' + x[3] + '" title="' + x[1] + ' ' + x[2] + '"></a>'; }).join('') + '</div><div class="legend"><b>' + all + ' protocols in the snapshot:</b> ' +
+      parts.map(function (x) { return '<span><i style="background:' + x[3] + '"></i><b>' + x[1] + '</b> ' + x[2] + '</span>'; }).join('') + '</div></section>';
   }
   function opts(list, cur, all) { return '<option value="">' + all + '</option>' + list.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
   function board(s) {
@@ -146,7 +152,7 @@
       '<select id="conf" aria-label="Minimum confidence"><option value="">Any confidence</option>' + ['40', '55', '70'].map(function (c) { return '<option value="' + c + '"' + (s.conf === c ? ' selected' : '') + '>Confidence ≥ ' + c + '</option>'; }).join('') + '</select>' +
       '<div class="seg" role="group" aria-label="Farm priority">' + seg + '</div>' +
       '<label class="muted"><input type="checkbox" id="w"' + (s.w ? ' checked' : '') + '> Watchlist only</label></form>' +
-      '<div class="chips" aria-live="polite"><span class="muted">' + (chips.length ? 'Filters:' : 'No filters: showing every candidate.') + '</span>' + chips.join('') + (chips.length ? '<button type="button" class="clear" data-unset="all">Clear all</button>' : '') + '</div>' +
+      '<div class="chips" aria-live="polite"><span class="muted"><b>' + list.length + ' of ' + rows.length + '</b> shown' + (s.w && list.length === R.counts.watchlist ? ' (all ' + R.counts.watchlist + ' watchlist protocols)' : '') + ' · ' + (chips.length ? 'filters:' : 'no filters') + '</span>' + chips.join('') + (chips.length ? '<button type="button" class="clear" data-unset="all">Clear all</button>' : '') + '</div>' +
       '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols ranked by implied launch value</caption><thead><tr>' +
       th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('age', 'No token for', 'n hide-sm') + th('b', 'Implied value (low – high)') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
       '</tr></thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>' +
