@@ -10,15 +10,16 @@ export interface Protocol {
 }
 export interface Snapshot { as_of: string; source: string; floor_usd: number; protocols: Protocol[]; watchlist: string[]; }
 export interface Verdict { status: 'live' | 'candidate' | 'excluded'; reason: string; flags: string[]; }
-export interface Backtest { n: number; flat: number; size: number; full: number; within_2x: number; }
 export interface Comparable { slug: string; name: string; category: string | null; symbol: string; records: number; tvl: number; mcap: number; multiple: number; resid: number; }
+export interface TermTest { name: string; feats: string[] | null; cat: boolean; mae: number; within_2x: number; }
+export interface Odds { c0: number; c1: number; n: number; bins: { from: number; to: number; n: number; share: number }[]; }
 export interface Fitted {
-  as_of: string; a: number; b: number; n: number; resid_sd: number; loo_mae: number; backtest: Backtest;
+  as_of: string; a: number; b: number; n: number; loo_mae: number; feats: string[]; useCat: boolean; tests: TermTest[]; odds: Odds;
   global: { n: number; median: number; q25: number; q75: number }; comps: Comparable[];
 }
 export interface Valuation {
-  base: number; low: number; high: number; multiple: number; confidence: number; age: number | null;
-  terms: { size: number; cat: number; momentum: number; season: number; chains: number; flags: number };
+  base: number; low: number; high: number; ifl: number; odds: number; carry: number; multiple: number; confidence: number; age: number | null;
+  terms: { curve: number; cat: number; carry: number; odds: number };
   parts: [string, number][]; drivers: string[];
   cat_detail: { category_n: number; category_median: number; sector: string; sector_n: number; sector_median: number; w_cat: number; w_sector: number };
   spread: { q25: number; q75: number };
@@ -26,11 +27,12 @@ export interface Valuation {
 export type Priority = 'farm now' | 'watch' | 'skip';
 
 interface RadarModel {
-  K: number;
+  K: number; USER_SHARE: number; TBILL: number; FLAG_ODDS: number;
   SECTORS: Record<string, string[]>;
   sectorOf(category: string | null): string;
   classify(snap: Snapshot): Record<string, Verdict>;
-  fit(snap: Snapshot): Fitted;
+  fit(snap: Snapshot, verdicts: Record<string, Verdict>): Fitted;
+  farm(m: Fitted, p: Protocol, v: Valuation, flagCount: number, position: number, weeks: number, costs: number): { slice: number; odds: number; expected: number; tbill: number; costs: number; net: number; breakeven: number };
   value(m: Fitted, p: Protocol, flagCount: number): Valuation;
   priority(flagCount: number, confidence: number, c7: number, net: number, cost: number): Priority;
 }

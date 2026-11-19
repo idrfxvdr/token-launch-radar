@@ -36,9 +36,9 @@
   /* ---------- theme ---------- */
   var root = document.documentElement;
   try { var saved = localStorage.getItem('radar-theme'); if (saved) root.dataset.theme = saved; } catch (e) { /* storage blocked */ }
+  if (root.dataset.theme !== 'light' && root.dataset.theme !== 'dark') root.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.getElementById('theme').onclick = function () {
-    var dark = root.dataset.theme === 'dark' || (root.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-    root.dataset.theme = dark ? 'light' : 'dark';
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
     try { localStorage.setItem('radar-theme', root.dataset.theme); } catch (e) { /* storage blocked */ }
   };
 
@@ -48,7 +48,7 @@
   var check = (function () {
     var M = window.RadarModel;
     if (!M || !R.snapshot) return { ok: 0, n: rows.length, ran: false };
-    var fitted = M.fit(R.snapshot), verdicts = M.classify(R.snapshot), bySlug = {}, ok = 0;
+    var verdicts = M.classify(R.snapshot), fitted = M.fit(R.snapshot, verdicts), bySlug = {}, ok = 0;
     R.snapshot.protocols.forEach(function (p) { bySlug[p.s || p.slug] = p; });
     rows.forEach(function (r) { var v = M.value(fitted, bySlug[r.s], verdicts[r.s].flags.length); if (verdicts[r.s].status === 'candidate' && v.base === r.b && v.low === r.lo && v.high === r.hi) ok++; });
     return { ok: ok, n: rows.length, ran: true, live: Object.keys(verdicts).filter(function (k) { return verdicts[k].status === 'live'; }).length };
@@ -72,7 +72,7 @@
       return true;
     });
   }
-  var KEYS = { r: 'r', n: 'n', c: 'c', ch: function (r) { return r.ch.length; }, tvl: 'tvl', d7: function (r) { return r.d7 === null ? -1e9 : r.d7; }, b: 'b', conf: 'conf', age: function (r) { return r.age === null ? -1 : r.age; }, pr: function (r) { return PR_ORDER[r.pr]; } };
+  var KEYS = { r: 'r', n: 'n', c: 'c', ch: function (r) { return r.ch.length; }, tvl: 'tvl', d7: function (r) { return r.d7 === null ? -1e9 : r.d7; }, b: 'b', conf: 'conf', od: 'od', pr: function (r) { return PR_ORDER[r.pr]; } };
   function sorted(list, s) {
     var k = KEYS[s.sort] || 'r', get = typeof k === 'function' ? k : function (r) { return r[k]; }, d = s.dir === 'desc' ? -1 : 1;
     return list.slice().sort(function (a, b) { var x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * d || a.r - b.r; });
@@ -136,13 +136,13 @@
         '<td class="hide-sm">' + esc(r.c) + '</td>' +
         '<td class="hide-md chainlist">' + esc(r.ch.slice(0, 2).join(', ')) + (r.ch.length > 2 ? ' +' + (r.ch.length - 2) : '') + '</td>' +
         '<td class="n"><div class="tvl"><span>' + usd(r.tvl) + '</span>' + trend(r) + '<span class="d7 ' + (r.d7 === null ? 'muted' : r.d7 >= 0 ? 'up' : 'down') + '">' + pct(r.d7) + '</span></div></td>' +
-        '<td class="n hide-sm">' + (r.age === null ? '<span class="muted">n/a</span>' : (r.age / 365).toFixed(1) + 'y') + '</td>' +
-        '<td><div class="range"><span class="hide-sm">' + rangeBar(r) + '</span><b>' + usd(r.b) + '</b><small>' + usd(r.lo) + ' – ' + usd(r.hi) + ' · ' + r.m.toFixed(2) + '× TVL</small></div></td>' +
+        '<td class="n hide-sm nw"><b>' + Math.round(r.od * 100) + '%</b> <span class="muted">' + (r.age === null ? 'age n/a' : (r.age / 365).toFixed(1) + 'y') + '</span></td>' +
+        '<td><div class="range"><span class="hide-sm">' + rangeBar(r) + '</span><b>' + usd(r.b) + '</b><small>' + usd(r.lo) + ' – ' + usd(r.hi) + ' · if launched ' + usd(r.ifl) + '</small></div></td>' +
         '<td class="n hide-sm nw"><span class="meter"><i style="width:' + r.conf + '%"></i></span>' + r.conf + '</td>' +
         '<td>' + pill(r.pr) + '</td></tr>';
     }).join('');
     return kpis() +
-      '<p class="howto"><b>How to read it:</b> rank = implied launch value, a size curve fitted on the ' + R.backtest.n + ' traded tokens in this snapshot (one per token family) plus a category premium. Blind test, each token left out and priced by the rest: off by ×' + Math.pow(10, R.backtest.full).toFixed(1) + ' typically vs ×' + Math.pow(10, R.backtest.flat).toFixed(1) + ' for a flat multiple. Each row opens its arithmetic, comparables and a farm plan netted to dollars. Traded tokens are under Already trading, not ranked.' +
+      '<p class="howto"><b>How to read it:</b> implied value = what a token would be worth if launched (a size curve fitted on the ' + R.fit.n + ' traded token families here, plus a category premium) × the fitted odds it launches within 12 months, which rise with the time it has run with no token. Every term was tested blind: ' + R.tests.filter(function (t) { return t.name.charAt(0) === '+'; }).map(function (t) { return t.name.slice(2) + (t.mae < R.tests[1].mae ? ' kept' : ' rejected'); }).join(', ') + ' (Method). Farm plans are netted for odds, gas, fees and T-bill yield.' +
         (check.ran ? ' <span class="' + (check.ok === check.n ? 'up' : 'down') + '"><b>' + (check.ok === check.n ? '✓' : '✗') + ' model.js re-run in this browser: ' + check.ok + ' / ' + check.n + ' values match board.json.</b></span>' : '') + '</p>' +
       '<form class="filters" role="search" onsubmit="return false">' +
       '<input type="search" id="q" placeholder="Search protocol, category or chain" aria-label="Search" value="' + esc(s.q) + '">' +
@@ -154,9 +154,8 @@
       '<label class="muted"><input type="checkbox" id="w"' + (s.w ? ' checked' : '') + '> Watchlist only</label></form>' +
       '<div class="chips" aria-live="polite"><span class="muted"><b>' + list.length + ' of ' + rows.length + '</b> shown' + (s.w && list.length === R.counts.watchlist ? ' (all ' + R.counts.watchlist + ' watchlist protocols)' : '') + ' · ' + (chips.length ? 'filters:' : 'no filters') + '</span>' + chips.join('') + (chips.length ? '<button type="button" class="clear" data-unset="all">Clear all</button>' : '') + '</div>' +
       '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols ranked by implied launch value</caption><thead><tr>' +
-      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('age', 'No token for', 'n hide-sm') + th('b', 'Implied value (low – high)') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
-      '</tr></thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>' +
-      '<p class="count">' + list.length + ' of ' + rows.length + ' candidates · rank is the model\'s value order; click a row for its math and farm plan.</p>';
+      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('od', '12-mo odds · age', 'n hide-sm') + th('b', 'Implied value = if launched × odds') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
+      '</tr></thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>';
   }
 
   function scatter(r) {
@@ -164,7 +163,7 @@
     function dec(t) { var u = ['', 'K', 'M', 'B', 'T'], k = Math.floor(t / 3); return '$' + Math.pow(10, t - 3 * k) + u[k]; }
     var xs = comps.map(function (c) { return Math.log10(c.tvl); }), ys = comps.map(function (c) { return Math.log10(c.mc); });
     var x0 = Math.floor(Math.min.apply(null, xs.concat([Math.log10(r.tvl)]))), x1 = Math.ceil(Math.max.apply(null, xs.concat([Math.log10(r.tvl)])));
-    var y0 = Math.floor(Math.min.apply(null, ys.concat([Math.log10(r.lo)]))), y1 = Math.ceil(Math.max.apply(null, ys.concat([Math.log10(r.hi)])));
+    var y0 = Math.floor(Math.min.apply(null, ys.concat([Math.log10(r.lo * r.ifl / r.b)]))), y1 = Math.ceil(Math.max.apply(null, ys.concat([Math.log10(r.hi * r.ifl / r.b)])));
     function X(v) { return P + (v - x0) / (x1 - x0) * (W - P - 10); }
     function Y(v) { return H - 22 - (v - y0) / (y1 - y0) * (H - 32); }
     var g = '';
@@ -175,11 +174,11 @@
       var same = c.c === r.c, sec = c.sec === r.sec;
       g += '<circle cx="' + X(Math.log10(c.tvl)).toFixed(1) + '" cy="' + Y(Math.log10(c.mc)).toFixed(1) + '" r="' + (same ? 4.5 : 3) + '" fill="' + (same ? 'var(--accent)' : sec ? 'var(--peer)' : 'none') + '" stroke="var(--peer)" opacity="' + (same || sec ? 0.95 : 0.6) + '"><title>' + esc(c.n + ' (' + c.sym + '): ' + usd(c.mc) + ' cap on ' + usd(c.tvl) + ' TVL') + '</title></circle>';
     });
-    var cx = X(Math.log10(r.tvl));
-    g += '<line x1="' + cx + '" y1="' + Y(Math.log10(r.lo)) + '" x2="' + cx + '" y2="' + Y(Math.log10(r.hi)) + '" stroke="var(--hi)" stroke-width="3" stroke-linecap="round"/><circle cx="' + cx + '" cy="' + Y(Math.log10(r.b)) + '" r="6" fill="var(--bg)" stroke="var(--hi)" stroke-width="3"/>';
-    g += '<text x="' + (cx + 9) + '" y="' + (Y(Math.log10(r.b)) + 4) + '" style="fill:var(--ink);font-weight:700">' + esc(r.n) + ' ' + usd(r.b) + '</text>';
+    var k = r.ifl / r.b, L = { lo: r.lo * k, b: r.ifl, hi: r.hi * k }, cx = X(Math.log10(r.tvl));
+    g += '<line x1="' + cx + '" y1="' + Y(Math.log10(L.lo)) + '" x2="' + cx + '" y2="' + Y(Math.log10(L.hi)) + '" stroke="var(--hi)" stroke-width="3" stroke-linecap="round"/><circle cx="' + cx + '" cy="' + Y(Math.log10(L.b)) + '" r="6" fill="var(--bg)" stroke="var(--hi)" stroke-width="3"/>';
+    g += '<text x="' + (cx + 9) + '" y="' + (Y(Math.log10(L.b)) + 4) + '" style="fill:var(--ink);font-weight:700">' + esc(r.n) + ' if launched ' + usd(L.b) + '</text>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Market cap against TVL for ' + comps.length + ' tokenised protocols, with this protocol\'s implied range">' + g + '</svg>' +
-      '<p class="muted" style="font-size:12px;margin:4px 0 0">Dots: the ' + comps.length + ' protocols whose token trades (filled orange: ' + esc(r.c) + '; grey: ' + esc(r.sec) + '). Dashed: the size curve. Bar: this protocol\'s low–high, ring: base.</p>';
+      '<p class="muted" style="font-size:12px;margin:4px 0 0">Dots: the ' + comps.length + ' protocols whose token trades (filled orange: ' + esc(r.c) + '; grey: ' + esc(r.sec) + '). Dashed: the size curve. Bar and ring: this protocol\'s value if launched, low–high and base.</p>';
   }
 
   function peers(r) {
@@ -193,17 +192,26 @@
   }
 
   function math(r) {
-    var t = r.t, cd = r.cd, L = Math.log10(r.tvl), logV = t.size + t.cat + t.momentum + t.season + t.chains + t.flags;
-    function row(label, how, v) { return '<tr><td>' + label + '<br><span class="muted">' + how + '</span></td><td>' + fx(v) + '</td></tr>'; }
+    var t = r.t, cd = r.cd, logV = t.curve + t.cat;
+    function row(label, how, v) { return '<tr><td>' + label + '<br><span class="muted">' + how + '</span></td><td>' + v + '</td></tr>'; }
     return '<table class="math"><tbody>' +
-      row('Size curve', 'a + b·log₁₀(TVL) = ' + R.fit.a + ' + ' + R.fit.b + ' × ' + L.toFixed(3), t.size) +
-      row(esc(r.c) + ' premium', cd.w_cat.toFixed(2) + ' × ' + fx(cd.category_median, 2) + ' (' + cd.category_n + ' peer' + (cd.category_n === 1 ? '' : 's') + ') + ' + (1 - cd.w_cat).toFixed(2) + ' × [' + cd.w_sector.toFixed(2) + ' × ' + fx(cd.sector_median, 2) + ' ' + esc(cd.sector) + ']', t.cat) +
-      row('Momentum', r.d7 === null ? 'no 7d change recorded' : '2·log₁₀(1 ' + (r.d7 >= 0 ? '+ ' : '− ') + Math.abs(r.d7 / 100).toFixed(3) + '), capped ±0.15', t.momentum) +
-      row('Seasoning', r.age === null ? 'no listing date' : '0.08 × min(' + (r.age / 365).toFixed(2) + 'y, 2) − 0.05', t.season) +
-      row('Chain breadth', '0.04 × log₂(' + r.ch.length + ' chains), cap 0.15', t.chains) +
-      row('Caution flags', r.fl.length + ' × −0.30', t.flags) +
-      '<tr class="tot"><td>log₁₀ V = ' + logV.toFixed(3) + '  →  base</td><td>' + usd(r.b) + '</td></tr>' +
-      '<tr><td>Low / high: peers\' residual quartiles ' + fx(r.sp.q25, 2) + ' / ' + fx(r.sp.q75, 2) + '</td><td>' + usd(r.lo) + ' – ' + usd(r.hi) + '</td></tr></tbody></table>';
+      row('Size curve on TVL carried a week', R.fit.a + ' + ' + R.fit.b + ' × log₁₀(' + usd(r.tvl) + ' × ' + r.cy.toFixed(3) + ' 7d carry)', fx(t.curve)) +
+      row(esc(r.c) + ' premium', cd.w_cat.toFixed(2) + ' × ' + fx(cd.category_median, 2) + ' (' + cd.category_n + ' peer' + (cd.category_n === 1 ? '' : 's') + ') + ' + (1 - cd.w_cat).toFixed(2) + ' × [' + cd.w_sector.toFixed(2) + ' × ' + fx(cd.sector_median, 2) + ' ' + esc(cd.sector) + ']', fx(t.cat)) +
+      '<tr class="tot"><td>log₁₀ V = ' + logV.toFixed(3) + ' → value if launched</td><td>' + usd(r.ifl) + '</td></tr>' +
+      row('× launch odds, 12 months', (r.age === null ? 'no listing date: age taken as 2y' : (r.age / 365).toFixed(2) + 'y with no token') + ' on F(a) = 1/(1+e^−(' + R.odds.c0 + ' + ' + R.odds.c1 + 'a))' + (r.fl.length ? ', × ' + R.flag_odds + ' per flag' : ''), '× ' + Math.round(r.od * 100) + '%') +
+      '<tr class="tot"><td>Implied value (ranked)</td><td>' + usd(r.b) + '</td></tr>' +
+      row('Low / high', 'peers\' residual quartiles ' + fx(r.sp.q25, 2) + ' / ' + fx(r.sp.q75, 2) + ', × odds', usd(r.lo) + ' – ' + usd(r.hi)) + '</tbody></table>';
+  }
+  /* Launch odds: the share of protocols with a token by age (bars), the fitted curve, and where this one sits. */
+  function oddsChart(r) {
+    var W = 320, H = 150, F = function (a) { return 1 / (1 + Math.exp(-(R.odds.c0 + R.odds.c1 * a))); }, X = function (a) { return 28 + a / 6 * (W - 36); }, Y = function (v) { return H - 20 - v * (H - 32); }, g = '', a;
+    R.odds.bins.forEach(function (b) { g += '<rect x="' + X(b.from) + '" y="' + Y(b.share) + '" width="' + (X(b.to) - X(b.from) - 3) + '" height="' + (Y(0) - Y(b.share)) + '" fill="var(--sunk)" stroke="var(--line)"/><text x="' + (X(b.from) + 4) + '" y="' + (Y(b.share) - 3) + '">' + Math.round(b.share * 100) + '% of ' + b.n + '</text>'; });
+    var d = ''; for (a = 0; a <= 6.01; a += 0.25) d += (a ? 'L' : 'M') + X(a).toFixed(1) + ' ' + Y(F(a)).toFixed(1);
+    g += '<path d="' + d + '" fill="none" stroke="var(--accent)" stroke-width="2"/>';
+    for (a = 0; a <= 6; a += 2) g += '<text x="' + X(a) + '" y="' + (H - 6) + '" text-anchor="middle">' + a + 'y</text>';
+    var ra = Math.min(6, r.age === null ? 2 : r.age / 365), rb = Math.min(6, ra + 1);
+    g += '<line x1="' + X(ra) + '" y1="' + Y(F(ra)) + '" x2="' + X(rb) + '" y2="' + Y(F(rb)) + '" stroke="var(--hi)" stroke-width="5" stroke-linecap="round" opacity=".55"/><circle cx="' + X(ra) + '" cy="' + Y(F(ra)) + '" r="5" fill="var(--hi)"/>';
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Share of protocols with a token by age, fitted curve">' + g + '</svg><p class="muted" style="font-size:12px;margin:4px 0 0">Bars: share of protocols with a token, by age. Line: the fit. Dot: ' + esc(r.n) + ' at ' + (r.age === null ? '2y (assumed)' : (r.age / 365).toFixed(1) + 'y') + '; the next year along the curve gives its ' + Math.round(r.od * 100) + '% odds.</p>';
   }
 
   function detail(slug) {
@@ -211,20 +219,18 @@
     if (!r) { sheet.hidden = true; return; }
     var done = {};
     try { done = JSON.parse(localStorage.getItem('radar-done-' + r.s) || '{}'); } catch (e) { done = {}; }
-    var prev = r.tvl / (1 + (r.d7 || 0) / 100);
     panel.innerHTML =
       '<div class="phead"><div><div class="muted">#' + r.r + ' of ' + rows.length + ' · ' + esc(r.c) + ' · ' + esc(r.ch.slice(0, 4).join(', ')) + (r.ch.length > 4 ? ' +' + (r.ch.length - 4) + ' more' : '') + (r.w ? ' <span class="tag w">house watchlist</span>' : '') + '</div><h2 id="d-title">' + esc(r.n) + '</h2></div><button class="close" type="button" data-close>Close ✕</button></div>' +
-      '<div class="cols"><div><div class="grid2"><div class="card"><h3>Implied launch value</h3><div class="big">' + usd(r.b) + '</div><div class="muted">range ' + usd(r.lo) + ' – ' + usd(r.hi) + ' · ' + r.m.toFixed(2) + '× its ' + usd(r.tvl) + ' TVL</div><div style="margin-top:8px">' + r.dr.map(function (d) { return '<span class="tag">' + esc(d) + '</span>'; }).join(' ') + '</div></div>' +
+      '<div class="cols"><div><div class="grid2"><div class="card"><h3>Implied value</h3><div class="big">' + usd(r.b) + '</div><div class="muted">' + usd(r.ifl) + ' if launched × ' + Math.round(r.od * 100) + '% odds in 12 months · range ' + usd(r.lo) + ' – ' + usd(r.hi) + '</div><div style="margin-top:8px">' + r.dr.map(function (d) { return '<span class="tag">' + esc(d) + '</span>'; }).join(' ') + '</div></div>' +
       '<div class="card"><h3>Confidence ' + r.conf + ' / 100 · ' + pill(r.pr) + '</h3><div class="muted" style="font-size:12px">' + r.cp.map(function (p) { return esc(p[0]) + ' <b style="color:var(--ink)">' + (p[1] >= 0 && p[0] !== 'start' ? '+' : '') + p[1] + '</b>'; }).join(' · ') + '</div><p style="margin:8px 0 0">' + esc(r.pw) + '</p></div></div>' +
       '<div class="card"><h3>Valuation: the arithmetic</h3>' + math(r) + '</div>' +
       '<div class="card"><h3>Against the tokenised market</h3>' + scatter(r) + '</div>' +
       '<div class="card"><h3>Comparables used</h3>' + peers(r) + '</div></div><div>' +
       '<div class="card"><h3>Why it is on the radar</h3><p style="margin:0">' + esc(r.why) + '</p>' + (r.fl.length ? '<ul class="risks">' + r.fl.map(function (f) { return '<li>⚑ ' + esc(f) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
-      '<div class="card"><h3>Farm plan</h3><div class="facts"><span>Chain <b>' + esc(r.chain) + '</b></span><span>Capital <b>' + usd(r.cap[0]) + ' → ' + usd(r.cap[1]) + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Est. per $1k <b>$' + r.k1.toFixed(2) + '</b></span><span>Gas <b>' + esc(r.gas) + '</b></span><span>Gas &amp; fees <b>~$' + r.tc + '</b></span><span>Expected drop <b>~$' + r.dp + '</b></span><span>Net <b class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</b></span><span>Hands-on <b>~' + r.hr + ' h</b></span></div>' +
+      '<div class="card"><h3>Farm plan</h3><div class="facts"><span>Chain <b>' + esc(r.chain) + '</b></span><span>Capital <b>' + usd(r.cap[0]) + ' → ' + usd(r.cap[1]) + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Slice if launched <b>$' + r.sl + '</b></span><span>× odds <b>' + Math.round(r.oh * 100) + '%</b></span><span>T-bill given up <b>$' + r.tb + '</b></span><span>Break-even odds <b>' + Math.round(r.be * 100) + '%</b></span><span>Gas <b>' + esc(r.gas) + '</b></span><span>Gas &amp; fees <b>~$' + r.tc + '</b></span><span>Expected <b>~$' + r.dp + '</b></span><span>Net <b class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</b></span><span>Hands-on <b>~' + r.hr + ' h</b></span></div>' +
       '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st[0]) + '<span class="ct">' + (st[3] ? '<i class="when">' + esc(st[3]) + '</i>' : '') + '<i>Cost: ' + esc(st[1]) + '</i><i>Time: ' + esc(st[2]) + '</i></span></span></label></li>'; }).join('') + '</ol></div>' +
       '<div class="card"><h3>Risks</h3><ul class="risks">' + r.rk.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' +
-      '<div class="card"><h3>TVL history in the snapshot</h3><p class="muted" style="margin:0 0 8px;font-size:12px">The snapshot records today\'s TVL and its 7-day change only; the earlier point is derived from them.</p>' + bars(prev, r) + '</div></div></div>' +
-      '<p class="muted" style="font-size:12px">Estimates, not financial advice. DefiLlama records no token for ' + esc(r.n) + '; that is not proof it has none.</p>';
+      '<div class="card"><h3>Launch odds from time with no token</h3>' + oddsChart(r) + '</div></div></div>';
     panel.onchange = function (e) {
       var i = e.target.getAttribute('data-step');
       if (i === null) return;
@@ -235,40 +241,29 @@
     panel.scrollTop = 0;
     panel.focus();
   }
-  function bars(prev, r) {
-    var mx = Math.max(prev, r.tvl), w = 300, h = 120, bw = 90;
-    function bar(x, v, label, fill) { var bh = v / mx * (h - 34); return '<rect x="' + x + '" y="' + (h - 18 - bh) + '" width="' + bw + '" height="' + bh + '" rx="4" fill="' + fill + '"/><text x="' + (x + bw / 2) + '" y="' + (h - 22 - bh) + '" text-anchor="middle" style="fill:var(--ink)">' + usd(v) + '</text><text x="' + (x + bw / 2) + '" y="' + (h - 4) + '" text-anchor="middle">' + label + '</text>'; }
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" role="img" aria-label="TVL 7 days ago and now">' + bar(40, prev, '7 days ago', 'var(--peer)') + bar(170, r.tvl, 'snapshot ' + esc(R.as_of), r.d7 === null || r.d7 >= 0 ? 'var(--pos)' : 'var(--neg)') + '</svg><p style="margin:4px 0 0" class="' + (r.d7 === null ? 'muted' : r.d7 >= 0 ? 'up' : 'down') + '">' + pct(r.d7) + ' over 7 days' + (r.age !== null ? ' · tracked since ' + esc(r.at) : '') + '</p>';
-  }
-
   function live() {
     var c = R.comps.slice().sort(function (a, b) { return b.mc - a.mc || (a.s < b.s ? -1 : 1); });
-    return '<div class="prose"><h2>Already trading: the comparables</h2><p>' + R.counts.live + ' protocols in the snapshot record a token. Records sharing a token are one family (Aave V2, V3 and Horizon are one AAVE), its TVL summed and its market cap counted once: the ' + c.length + ' families with a market cap set the multiples every candidate is valued on. They are kept off the board: their token exists. "vs curve" is each one\'s market cap against the size curve, the residual the category premiums are built from.</p></div>' +
-      '<div class="tablewrap"><table><thead><tr><th>Protocol</th><th>Token</th><th class="n hide-sm">Records</th><th class="hide-sm">Category</th><th class="n">TVL</th><th class="n">Market cap</th><th class="n">Mcap/TVL</th><th class="n hide-sm">vs curve</th></tr></thead><tbody>' +
-      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="n hide-sm">' + x.rec + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + x.x.toFixed(2) + '×</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + times(x.e) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    return '<div class="prose"><h2>Already trading: the comparables</h2><p>' + R.counts.live + ' records carry a token and are kept off the board. Records sharing a symbol are one family, TVL summed and market cap counted once: these ' + c.length + ' families price every candidate. "vs curve": market cap against the size curve.</p></div>' +
+      '<div class="tablewrap"><table><thead><tr><th>Protocol</th><th>Token</th><th class="hide-sm">Category</th><th class="n">TVL</th><th class="n">Market cap</th><th class="n">Mcap/TVL</th><th class="n hide-sm">vs curve</th></tr></thead><tbody>' +
+      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + x.x.toFixed(2) + '×</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + times(x.e) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   }
   function excluded() {
     var x = R.excluded.slice().sort(function (a, b) { return b.tvl - a.tvl || (a.s < b.s ? -1 : 1); });
-    return '<div class="prose"><h2>Excluded: no token recorded, but not a launch candidate</h2><p>' + x.length + ' records carry no token yet are a wrapped, staked, bridged or custodial form of an asset that already trades, an exchange product, or a version of a protocol whose token trades (matched by name family in the same snapshot). The house watchlist is always kept on the board, with a flag where one of these rules doubts it.</p></div>' +
+    return '<div class="prose"><h2>Excluded: no token recorded, but not a launch candidate</h2><p>' + x.length + ' records carry no token but are a wrapped, staked, bridged or exchange product, or a version of a protocol whose token trades. House watchlist rows stay on the board, flagged.</p></div>' +
       '<div class="tablewrap"><table><thead><tr><th>Record</th><th class="hide-sm">Category</th><th class="n">TVL</th><th>Why it is off the board</th></tr></thead><tbody>' +
       x.map(function (e) { return '<tr><td class="pname">' + esc(e.n) + '</td><td class="hide-sm">' + esc(e.c) + '</td><td class="n">' + usd(e.tvl) + '</td><td>' + esc(e.why) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   }
   function method() {
-    var f = R.fit, err = Math.pow(10, f.loo_mae);
+    var f = R.fit, o = R.odds, best = R.tests[1].mae;
     return '<article class="prose">' +
-      '<h2>What this board claims</h2><p>For each protocol that records no token, what a token would be worth at launch if its record stayed as it is, and how to farm it. It does not predict whether or when a token launches. Snapshot: ' + esc(R.source) + ' (' + R.counts.protocols + ' protocols at $5M+ TVL).</p>' +
-      '<h2>1. Who is on the board</h2><p><b>Live</b> (' + R.counts.live + '): a token symbol or CoinGecko id is recorded. <b>Excluded</b> (' + R.counts.excluded + '): no token recorded, but a Liquid Staking, Restaking, Bridge or CEX record, a name with wrapped/staked, an exchange\'s name, a version marker, or a first word shared with a protocol whose token trades. <b>Candidates</b> (' + rows.length + '): the rest, every one of the ' + R.counts.watchlist + ' house watchlist slugs included. Watchlist rows a rule doubts stay on, with a ⚑ flag (chain-native app, a chain, a stablecoin record) that lowers value and confidence.</p>' +
-      '<h2>2. The value model</h2><pre>log₁₀ V = a + b·log₁₀(TVL) + δ_category + momentum + seasoning + chains + flags</pre>' +
-      '<p>The size curve is an ordinary least-squares fit of log market cap on log TVL over the <b>' + f.n + '</b> token families that trade (one per token, its records\' TVL summed): a = ' + f.a + ', b = ' + f.b + ' (a 10× larger TVL earns about ' + Math.pow(10, f.b).toFixed(1) + '× the value, so big protocols get lower multiples). Residual s.d. ' + f.resid_sd + ' dex; leave-one-out mean absolute error ' + f.loo_mae + ' dex, a typical miss of ×' + err.toFixed(1) + ', which is why every row carries a range.</p>' +
-      '<h2>2a. The blind test</h2><p>Each of the ' + R.backtest.n + ' families is left out in turn, the model is refitted on the rest, and the left-out market cap is predicted. Mean absolute error, in dex:</p><table class="math" style="max-width:520px"><tbody>' +
-      '<tr><td>Flat multiple (median market cap / TVL)</td><td>' + R.backtest.flat.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.flat).toFixed(2) + '</td></tr>' +
-      '<tr><td>Size curve alone</td><td>' + R.backtest.size.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.size).toFixed(2) + '</td></tr>' +
-      '<tr class="tot"><td>Size curve + shrunk category premium (used)</td><td>' + R.backtest.full.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.full).toFixed(2) + '</td></tr></tbody></table>' +
-      '<p>The size curve is what earns its place: it beats a flat multiple by ' + Math.round((1 - Math.pow(10, R.backtest.size - R.backtest.flat)) * 100) + '% of the typical miss. The category premium adds little out of sample, which is why it is shrunk hard toward its sector; ' + Math.round(R.backtest.within_2x * 100) + '% of traded tokens land within 2× of their blind price. The momentum, seasoning and chain terms are stated priors, not fitted: the snapshot gives traded tokens no "time with no token" to test them on.</p>' +
-      '<p><b>δ_category</b> is the median residual of the category\'s tokenised peers, shrunk toward its sector\'s with weight n / (n + ' + R.k + '); the sector\'s is shrunk toward zero the same way. <b>Momentum</b> = 2·log₁₀(1 + 7d change), within ±0.15. <b>Seasoning</b> = 0.08·min(years tracked with no token, 2) − 0.05: a new protocol\'s TVL is unproven, a long-running one\'s is sticky. <b>Chains</b> = 0.04·log₂(chain count), at most 0.15. <b>Flags</b> = −0.30 each. Low and high apply the peers\' residual quartiles.</p>' +
-      '<h2>3. Confidence</h2><p>Starts at 50: + 4 per category peer (max 20), − 25 per dex of peer spread beyond 0.9, + 6 per dex of TVL above $50M, − 8 for no 7d change or a swing past 25%, − 8 for no listing date, − 6 if under 4 months old, − 18 per flag; held within 5–95.</p>' +
-      '<h2>4. Farm plans and priority</h2><p>Each plan is written from the protocol\'s sector, category, chains, TVL, age and trend: the cheapest chain it runs on, sector-specific actions, a test ticket and a full position scaled by confidence, a horizon by age, and the estimate <code>per $1k = ' + Math.round(R.user_share * 100) + '% × V × 1000 / TVL</code> (the share of a launch commonly given to users, pro rata). Each plan is netted: <code>net = expected drop on the full position − gas − bridge − running fees</code> (perp fees, swap fees or borrow interest over the horizon). <b>Farm now</b>: no flag, confidence ≥ 55, 7d TVL above −12% and a net of at least $50 and twice its cost. <b>Skip</b>: a flag, confidence &lt; 40, or a net loss. Otherwise <b>watch</b> (thin).</p>' +
-      '<h2>Caveats</h2><p class="note">Estimates, not financial advice. The snapshot has no fees, revenue, raises, audits or TVL history, so the model uses none; market caps stand in for FDV. A record with no token may still have one. Points programmes and their rules change; check each protocol\'s own terms before depositing.</p></article>';
+      '<h2>What the board claims</h2><p>For each protocol that records no token: what a token would be worth if launched with its record as it stands, the odds it launches within a year, and whether farming it pays. Snapshot: ' + esc(R.source) + ', ' + R.counts.protocols + ' protocols. The code is model.js, run by main.ts and again by this page.</p>' +
+      '<h2>1. Who is ranked</h2><p><b>' + R.counts.live + '</b> record a token (comparables). <b>' + R.counts.excluded + '</b> record none but are Liquid Staking, Bridge or CEX records, wrapped/staked names, exchange names, version markers, or share a first word with a traded token. <b>' + rows.length + '</b> remain, all ' + R.counts.watchlist + ' watchlist slugs among them; a watchlist row a rule doubts keeps a ⚑ flag.</p>' +
+      '<h2>2. Value if launched, tested blind</h2><p>Each of the ' + f.n + ' token families is left out, the model refitted on the rest, its market cap predicted. A term is used only if it lowers that error:</p><table class="math" style="max-width:560px"><tbody>' +
+      R.tests.map(function (t) { var plus = t.name.charAt(0) === '+', used = t.name === 'size curve' || (plus && t.mae < best); return '<tr' + (used ? ' class="tot"' : '') + '><td>' + esc(t.name) + (plus ? (t.mae < best ? ' · kept' : ' · rejected') : '') + '</td><td>' + t.mae.toFixed(3) + ' dex · ×' + Math.pow(10, t.mae).toFixed(2) + ' · ' + Math.round(t.w2 * 100) + '% within 2×</td></tr>'; }).join('') + '</tbody></table>' +
+      '<p>Curve: log₁₀ mcap = ' + f.a + ' + ' + f.b + '·log₁₀ TVL. 7d growth enters as a projection, TVL carried one more week at its rate (as a fitted term it lost the test). The category premium is the median residual of its peers, shrunk to its sector\'s with weight n/(n+' + R.k + ').</p>' +
+      '<h2>3. Launch odds from time with no token</h2><p>Share of protocols with a token by age: ' + o.bins.map(function (b) { return b.from + '–' + b.to + 'y ' + Math.round(b.share * 100) + '%'; }).join(', ') + ' (' + o.n + ' records). Fitted F(a) = 1/(1+e^−(' + o.c0 + ' + ' + o.c1 + 'a)); odds of a launch within a year at age a: (F(a+1) − F(a)) / (1 − F(a)); × ' + R.flag_odds + ' per caution flag. A cross-section, not a panel: an estimate.</p>' +
+      '<h2>4. Farm verdicts</h2><p><code>net = ' + Math.round(R.user_share * 100) + '% × value if launched × position / TVL × odds − gas − fees − ' + Math.round(R.tbill * 100) + '% T-bill yield while held</code>. <b>Farm now</b>: no flag, confidence ≥ 55, 7d TVL above −12%, net ≥ $25 and ≥ its costs. <b>Skip</b>: a flag, confidence &lt; 40 or a net loss. Else <b>watch</b>.</p>' +
+      '<h2>Caveats</h2><p class="note">Estimates, not financial advice. No fees, revenue, raises, audits or history in the snapshot, so none used; market caps stand in for FDV. A record with no token may still have one.</p></article>';
   }
 
   /* ---------- render and events ---------- */

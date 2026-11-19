@@ -40,7 +40,7 @@ const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snap = parseSnapshot(readFileSync(inputFile, 'utf8'));
 const verdicts = M.classify(snap);
-const model = M.fit(snap);
+const model = M.fit(snap, verdicts);
 const house = new Set(snap.watchlist);
 
 interface Scored { p: Protocol; v: Valuation; plan: Plan; sector: string; }
@@ -49,7 +49,7 @@ const scored: Scored[] = snap.protocols
   .map((p) => {
     const v = M.value(model, p, verdicts[p.slug]!.flags.length);
     const sector = M.sectorOf(p.category);
-    return { p, v, sector, plan: plan(p, v, verdicts[p.slug]!, sector) };
+    return { p, v, sector, plan: plan(p, v, verdicts[p.slug]!, sector, model) };
   })
   .sort((x, y) => y.v.base - x.v.base || (x.p.slug < y.p.slug ? -1 : 1));
 
@@ -104,8 +104,11 @@ const radar = {
     live: Object.values(verdicts).filter((x) => x.status === 'live').length,
     excluded: Object.values(verdicts).filter((x) => x.status === 'excluded').length,
   },
-  fit: { a: model.a, b: model.b, n: model.n, resid_sd: model.resid_sd, loo_mae: model.loo_mae },
-  backtest: model.backtest,
+  fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.useCat },
+  tests: model.tests.map((t) => ({ name: t.name, mae: t.mae, w2: t.within_2x })),
+  odds: { c0: model.odds.c0, c1: model.odds.c1, n: model.odds.n, bins: model.odds.bins },
+  tbill: M.TBILL,
+  flag_odds: M.FLAG_ODDS,
   global: { q25: model.global.q25, median: model.global.median, q75: model.global.q75 },
   k: M.K,
   user_share: USER_SHARE,
@@ -114,9 +117,9 @@ const radar = {
   snapshot: { as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd, watchlist: snap.watchlist, protocols: snap.protocols },
   rows: scored.map(({ p, v, plan: f, sector }, i) => ({
     r: i + 1, s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', sec: sector, ch: p.chains, tvl: p.tvl_usd, d7: p.change_7d,
-    at: p.listed_at, age: v.age, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, m: v.multiple, conf: v.confidence,
+    at: p.listed_at, age: v.age, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, ifl: v.ifl, od: v.odds, cy: v.carry, m: v.multiple, conf: v.confidence,
     cp: v.parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts[p.slug]!.reason, fl: verdicts[p.slug]!.flags,
-    pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net,
+    pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net, sl: f.slice, oh: f.odds, tb: f.tbill, be: f.breakeven,
     st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks,
   })),
   comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: M.sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),

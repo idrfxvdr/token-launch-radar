@@ -6,9 +6,9 @@
 // users, pro rata to their share of TVL over the campaign. So $1,000 deposited is worth roughly
 // USER_SHARE * V * 1000 / TVL at launch, the "per $1k" figure every plan quotes.
 
-import { M, type Priority, type Protocol, type Valuation, type Verdict } from './model.ts';
+import { M, type Fitted, type Priority, type Protocol, type Valuation, type Verdict } from './model.ts';
 
-export const USER_SHARE = 0.07;
+export const USER_SHARE = M.USER_SHARE;
 
 /** One step: what to do, what it costs, how long it takes. */
 export interface Step { text: string; cost: string; time: string; when?: string; }
@@ -23,7 +23,11 @@ export interface Plan {
   gas_usd: number;           // what one transaction costs on the chosen chain
   total_cost: number;        // gas and fees for the whole plan, US dollars
   fees: number;              // the sector's running fees over the horizon (trading, borrow), US dollars
-  drop: number;              // the expected launch value of the full position, US dollars
+  drop: number;              // expected payout of the full position: slice x launch odds in the horizon
+  slice: number;             // the position's share of a launch, if one comes
+  odds: number;              // fitted odds of a launch inside the horizon
+  tbill: number;             // T-bill yield the position gives up over the horizon
+  breakeven: number;         // the launch odds at which the plan breaks even
   net: number;               // drop - total_cost: what farming nets at the model's base value
   hours: number;             // hands-on hours for the whole plan
   gas: string;
@@ -99,11 +103,11 @@ function actions(sector: string, cat: string, x: Ctx): Step[] {
   ];
 }
 
-export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string): Plan {
+export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string, m: Fitted): Plan {
   const chain = pickChain(p.chains);
   const cheap = !MAINNET.has(chain);
   const gas = cheap ? 0.3 : 12;
-  const per1k = Math.round((USER_SHARE * v.base * 1000) / p.tvl_usd * 100) / 100;
+  const per1k = Math.round((USER_SHARE * v.ifl * 1000) / p.tvl_usd * 100) / 100; // the slice per $1k if a token launches
   // Size: a test ticket, then a position that scales with confidence (a capped $10k at 95).
   const ticket = cheap ? 250 : 1000;
   const full = Math.max(ticket * 2, Math.round((v.confidence / 95) * 10) * 1000);
@@ -114,13 +118,14 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   const cat = p.category ?? 'Uncategorised';
   const share = (full / p.tvl_usd) * 1e4; // basis points of TVL a full position holds
 
+  const pre = M.farm(m, p, v, verdict.flags.length, full, weeks, 0); // payout side only; costs come with the steps
   const steps: Step[] = [];
   steps.push({ text: `Open ${p.name}'s app from its DefiLlama listing (slug ${p.slug}), bookmark it, and match its contract addresses against its docs; farm from one fresh wallet funded only for this.`, cost: '$0', time: '10 min' });
   steps.push(cheap
     ? { text: `Farm on ${chain}${p.chains.length > 1 ? ` (it also runs on ${p.chains.filter((c) => c !== chain).slice(0, 3).join(', ')})` : ''}: bridge ${usd(ticket)} of USDC there first, since a transaction costs about $${gas.toFixed(2)} and weekly actions stay cheap.`, cost: `$1-$5 bridge fee`, time: '15 min' }
     : { text: `Farm on ${chain}, its ${p.chains.length === 1 ? 'only' : 'main'} chain, where a transaction costs about $${gas}: batch actions and keep at least ${usd(ticket)} in so gas stays under 2% of the position.`, cost: `~$${gas * 2} to fund the wallet`, time: '15 min' });
   steps.push(...actions(sector, cat, x));
-  steps.push({ text: `Hold for ${weeks} weeks${age !== null ? ` (${p.name} has run ${Math.round(age / 30)} months with no token)` : ''}: ${usd(full)} is ${share >= 1 ? share.toFixed(1) : share.toFixed(2)} bp of its ${big(p.tvl_usd)} TVL, worth about ${usd((per1k * full) / 1000)} at the model's base value if ${(USER_SHARE * 100).toFixed(0)}% goes to users pro rata.`, cost: `${tx(x, Math.ceil(weeks / 4))} for monthly top-ups`, time: `10 min a week, ${Math.round(weeks * 10 / 60)} h in all` });
+  steps.push({ text: `Hold for ${weeks} weeks${age !== null ? ` (${p.name} has run ${Math.round(age / 30)} months with no token)` : ''}: ${usd(full)} is ${share >= 1 ? share.toFixed(1) : share.toFixed(2)} bp of its ${big(p.tvl_usd)} TVL, worth ${usd(pre.slice)} if a token launches (${(USER_SHARE * 100).toFixed(0)}% to users, pro rata); the fitted odds of a launch within 12 months are ${Math.round(pre.odds * 100)}%, so about ${usd(pre.expected)} expected.`, cost: `${tx(x, Math.ceil(weeks / 4))} for monthly top-ups`, time: `10 min a week, ${Math.round(weeks * 10 / 60)} h in all` });
   steps.push(c7 < -10
     ? { text: `Re-check TVL weekly: it fell ${c7.toFixed(1)}% in the last 7 days, so if it falls another 15%, withdraw to the test ticket and wait for a turn.`, cost: tx(x, 1), time: '5 min a week' }
     : c7 > 10
@@ -139,16 +144,16 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
     : /Lending|Collateral/.test(cat) ? full * 0.35 * 0.07 * weeks / 52
     : 0);
   const total = Math.round(txs * gas + (cheap ? 3 : 24)) + fees;
-  const drop = Math.round((per1k * full) / 1000);
-  const net = drop - total;
+  const f = M.farm(m, p, v, verdict.flags.length, full, weeks, total);
+  const drop = f.expected, net = f.net;
 
   // The rule itself is RadarModel.priority (dashboard/model.js); here it is put into words.
   const priority: Priority = M.priority(verdict.flags.length, v.confidence, c7, net, total);
   let why: string;
   if (verdict.flags.length > 0) why = `Skip: ${verdict.flags[0]}.`;
   else if (v.confidence < 40) why = `Skip: confidence ${v.confidence}/100 is too low to commit capital on.`;
-  else if (net <= 0) why = `Skip: ${usd(full)} would earn about $${drop} at launch against $${total} of gas and fees, a net loss.`;
-  else if (priority === 'farm now') { why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected at launch less $${total} gas and fees), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
+  else if (net <= 0) why = `Skip: ${usd(full)} expects about $${drop} (a $${f.slice} slice x ${Math.round(f.odds * 100)}% launch odds) against $${total} of gas and fees and $${f.tbill} of T-bill yield given up: it needs ${Math.round(f.breakeven * 100)}% odds to break even.`;
+  else if (priority === 'farm now') { why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected less $${total} gas and fees and $${f.tbill} of T-bill yield; break-even odds ${Math.round(f.breakeven * 100)}%), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
   else { why = `Watch (thin): nets about $${net} on ${usd(full)}${c7 <= -12 ? ` and TVL fell ${c7.toFixed(1)}% in 7d` : v.confidence < 55 ? ` at confidence ${v.confidence}/100` : ''}; enter on a points announcement or a turn in TVL.`; }
   const minutes = steps.reduce((s, st) => s + [...st.time.matchAll(/(\d+) min(?! a week)/g)].reduce((a, m) => a + Number(m[1]), 0), 0) + weeks * 10;
 
@@ -162,7 +167,7 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   if (sector === 'Credit') risks.push(`Liquidation: a borrow or mint position can be liquidated on a fast move; keep the health factor well above the minimum.`);
   for (const f of verdict.flags) risks.push(`Token risk: ${f}.`);
   risks.push(`No token is announced: the implied value is a model estimate, and a launch may never come.`);
-  return { priority, why, chain, per_1k: per1k, capital: [ticket, full], weeks, gas_usd: gas, total_cost: total, fees, drop, net, hours: Math.round(minutes / 6) / 10, gas: cheap ? `about $${gas.toFixed(2)} a transaction on ${chain}` : `about $${gas} a transaction on ${chain}`, steps, risks };
+  return { priority, why, chain, per_1k: per1k, capital: [ticket, full], weeks, gas_usd: gas, total_cost: total, fees, drop, net, slice: f.slice, odds: f.odds, tbill: f.tbill, breakeven: f.breakeven, hours: Math.round(minutes / 6) / 10, gas: cheap ? `about $${gas.toFixed(2)} a transaction on ${chain}` : `about $${gas} a transaction on ${chain}`, steps, risks };
 }
 
 /** A step as one board string: what to do, then its cost and time. */
