@@ -17,11 +17,12 @@
 
   /* ---------- 1. classify: live token, pre-token candidate, or a product of a traded token ---------- */
   var DERIVATIVE_CATS = ['Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'Bridge', 'Canonical Bridge', 'CEX', 'Anchor BTC'];
+  // Exclusion only, never value: the exchange names of the house watchlist rule (an exchange's staked or wrapped product).
   var EXCHANGES = ['binance', 'coinbase', 'bybit', 'kraken', 'bitget', 'okx', 'bitfinex', 'gemini', 'htx', 'kucoin', 'gate', 'mexc', 'crypto.com'];
   var DERIVATIVE_WORDS = /\b(wrapped|staked|staking|restaked|bridged|liquid staking)\b/i;
   var VERSION = /\s(v\d+(\.\d+)?|\d+\.\d+)$/i;
   var GENERIC = ['the', 'liquid', 'finance', 'protocol', 'money', 'capital', 'labs', 'network', 'dao', 'swap', 'yield', 'vault', 'vaults', 'pool', 'pools', 'lend', 'earn', 'staking', 'bridge', 'exchange', 'markets', 'market', 'stable', 'usd', 'btc', 'eth', 'sol', 'open', 'base', 'one', 'pro', 'prime', 'core', 'x'];
-  /** A name's family key: its first word, if 4+ letters and not generic ("uniswap" for Uniswap V4). */
+  /** A name's family key: its first word, if 4+ letters and not generic ("Foo V4" and "Foo V3" share "foo"). */
   function familyKey(name) {
     var first = name.toLowerCase().replace(VERSION, '').split(/[\s\-_.:()/]+/).filter(function (w) { return w; })[0] || '';
     var w = first.replace(/[^a-z0-9]/g, '');
