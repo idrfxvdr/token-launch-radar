@@ -28,7 +28,7 @@ export const K = 4;
 
 export interface Fit { a: number; b: number; n: number; resid_sd: number; loo_mae: number; }
 export interface Group { n: number; median: number; q25: number; q75: number; }
-export interface Comparable { slug: string; name: string; category: string | null; tvl: number; mcap: number; symbol: string; multiple: number; resid: number; }
+export interface Comparable { slug: string; name: string; category: string | null; tvl: number; mcap: number; symbol: string; multiple: number; resid: number; records: number; }
 
 export interface Valuation {
   base: number; low: number; high: number;
@@ -60,12 +60,65 @@ function ols(xs: number[], ys: number[]): { a: number; b: number } {
   return { a: my - b * mx, b };
 }
 
+/**
+ * One comparable per traded token. DefiLlama records a token's market cap on one record (Aave V2 holds AAVE's)
+ * while its sibling records carry the symbol alone (Aave V3, Aave Horizon): records sharing a symbol (or, with
+ * none, a CoinGecko id) are one family, whose TVL is the sum of its records and whose market cap is counted once.
+ */
+export interface Family { slug: string; name: string; category: string | null; symbol: string; tvl: number; mcap: number; records: number; }
+export function tokenFamilies(snap: Snapshot): Family[] {
+  const fams = new Map<string, Protocol[]>();
+  for (const p of snap.protocols) {
+    const key = p.symbol !== null ? `sym:${p.symbol.toUpperCase()}` : p.gecko_id;
+    if (key !== null) fams.set(key, [...(fams.get(key) ?? []), p]);
+  }
+  const out: Family[] = [];
+  for (const members of fams.values()) {
+    const mcap = Math.max(0, ...members.map((m) => m.mcap_usd ?? 0));
+    const tvl = members.reduce((s, m) => s + m.tvl_usd, 0);
+    if (mcap <= 0 || tvl <= 0) continue;
+    // The family is named and categorised by its largest record (ties by slug).
+    const lead = [...members].sort((x, y) => y.tvl_usd - x.tvl_usd || (x.slug < y.slug ? -1 : 1))[0]!;
+    out.push({ slug: lead.slug, name: lead.name, category: lead.category, symbol: lead.symbol ?? lead.gecko_id ?? '', tvl, mcap, records: members.length });
+  }
+  return out.sort((x, y) => (x.slug < y.slug ? -1 : 1));
+}
+
+export interface Backtest { n: number; flat: number; size: number; full: number; within_2x: number; }
+/**
+ * Leave one family out, refit on the rest, predict its market cap: the mean absolute error in dex (log10) of
+ * a flat median multiple, the size curve alone, and the size curve plus the shrunk category premium.
+ */
+function backtest(peers: Family[], xs: number[], ys: number[]): Backtest {
+  let flat = 0, size = 0, full = 0, hit = 0;
+  const med = (v: number[]) => quantile([...v].sort((p, q) => p - q), 0.5);
+  for (let i = 0; i < peers.length; i++) {
+    const keep = peers.map((_, j) => j).filter((j) => j !== i);
+    const kx = keep.map((j) => xs[j]!), ky = keep.map((j) => ys[j]!);
+    flat += Math.abs(ys[i]! - (xs[i]! + med(keep.map((j) => ys[j]! - xs[j]!))));
+    const f = ols(kx, ky);
+    const curve = f.a + f.b * xs[i]!;
+    size += Math.abs(ys[i]! - curve);
+    const res = keep.map((j) => ({ c: peers[j]!.category, s: sectorOf(peers[j]!.category), e: ys[j]! - (f.a + f.b * xs[j]!) }));
+    const sec = res.filter((r) => r.s === sectorOf(peers[i]!.category)).map((r) => r.e);
+    const cat = res.filter((r) => r.c === peers[i]!.category).map((r) => r.e);
+    const secPrem = sec.length ? (sec.length / (sec.length + K)) * med(sec) : 0;
+    const catPrem = cat.length ? (cat.length / (cat.length + K)) * med(cat) + (K / (cat.length + K)) * secPrem : secPrem;
+    const err = Math.abs(ys[i]! - (curve + catPrem));
+    full += err;
+    if (err <= Math.log10(2)) hit++;
+  }
+  const n = peers.length;
+  return { n, flat: round3(flat / n), size: round3(size / n), full: round3(full / n), within_2x: round3(hit / n) };
+}
+
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
 export class Model {
   fit: Fit;
+  backtest: Backtest;
   comps: Comparable[];
   cats = new Map<string, Group>();
   sectors = new Map<string, Group>();
@@ -75,18 +128,13 @@ export class Model {
 
   constructor(snap: Snapshot) {
     this.snap = snap;
-    const peers = snap.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
-    const xs = peers.map((p) => Math.log10(p.tvl_usd)), ys = peers.map((p) => Math.log10(p.mcap_usd!));
+    const peers = tokenFamilies(snap);
+    const xs = peers.map((p) => Math.log10(p.tvl)), ys = peers.map((p) => Math.log10(p.mcap));
     const { a, b } = ols(xs, ys);
     const resid = ys.map((y, i) => y - (a + b * xs[i]!));
-    // Leave-one-out: refit without each peer and score its own market cap, the model's honest error.
-    let loo = 0;
-    for (let i = 0; i < peers.length; i++) {
-      const f = ols(xs.filter((_, j) => j !== i), ys.filter((_, j) => j !== i));
-      loo += Math.abs(ys[i]! - (f.a + f.b * xs[i]!));
-    }
-    this.fit = { a: round3(a), b: round3(b), n: peers.length, resid_sd: round3(Math.sqrt(resid.reduce((p, e) => p + e * e, 0) / (peers.length - 2))), loo_mae: round3(loo / peers.length) };
-    this.comps = peers.map((p, i) => ({ slug: p.slug, name: p.name, category: p.category, tvl: p.tvl_usd, mcap: p.mcap_usd!, symbol: p.symbol ?? p.gecko_id ?? '', multiple: round3(p.mcap_usd! / p.tvl_usd), resid: round3(resid[i]!) }));
+    this.backtest = backtest(peers, xs, ys);
+    this.fit = { a: round3(a), b: round3(b), n: peers.length, resid_sd: round3(Math.sqrt(resid.reduce((p, e) => p + e * e, 0) / (peers.length - 2))), loo_mae: this.backtest.full };
+    this.comps = peers.map((p, i) => ({ slug: p.slug, name: p.name, category: p.category, tvl: p.tvl, mcap: p.mcap, symbol: p.symbol, multiple: round3(p.mcap / p.tvl), resid: round3(resid[i]!), records: p.records }));
     this.global = group(resid);
     const byCat = new Map<string, number[]>(), bySector = new Map<string, number[]>();
     this.comps.forEach((c) => {

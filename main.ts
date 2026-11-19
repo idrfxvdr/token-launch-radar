@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classify, parseSnapshot, type Protocol } from './lib/classify.ts';
 import { Model, SECTORS, sectorOf, type Valuation } from './lib/value.ts';
-import { plan, USER_SHARE, type Plan } from './lib/plans.ts';
+import { plan, stepText, USER_SHARE, type Plan } from './lib/plans.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -74,7 +74,11 @@ const board = scored.map(({ p, v, plan: f, sector }, i) => ({
   flags: verdicts.get(p.slug)!.flags,
   drivers: v.drivers,
   per_1k_usd: f.per_1k,
-  farm_steps: f.steps,
+  farm_steps: f.steps.map(stepText),
+  farm_cost_usd: f.total_cost,
+  farm_expected_drop_usd: f.drop,
+  farm_net_usd: f.net,
+  farm_hours: f.hours,
   risks: f.risks,
 }));
 
@@ -102,6 +106,7 @@ const radar = {
     excluded: [...verdicts.values()].filter((x) => x.status === 'excluded').length,
   },
   fit: model.fit,
+  backtest: model.backtest,
   global: { q25: model.global.q25, median: model.global.median, q75: model.global.q75 },
   k: 4,
   user_share: USER_SHARE,
@@ -110,9 +115,10 @@ const radar = {
     r: i + 1, s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', sec: sector, ch: p.chains, tvl: p.tvl_usd, d7: p.change_7d,
     at: p.listed_at, age: v.age_days, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, m: v.multiple, conf: v.confidence,
     cp: v.confidence_parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts.get(p.slug)!.reason, fl: verdicts.get(p.slug)!.flags,
-    pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, st: f.steps, rk: f.risks,
+    pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net,
+    st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks,
   })),
-  comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: sectorOf(c.category), sym: c.symbol, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
+  comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
   excluded: snap.protocols.filter((p) => verdicts.get(p.slug)!.status === 'excluded')
     .map((p) => ({ s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', tvl: p.tvl_usd, why: verdicts.get(p.slug)!.reason })),
 };

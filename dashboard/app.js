@@ -63,7 +63,7 @@
       return true;
     });
   }
-  var KEYS = { r: 'r', n: 'n', c: 'c', ch: function (r) { return r.ch.length; }, tvl: 'tvl', d7: function (r) { return r.d7 === null ? -1e9 : r.d7; }, b: 'b', conf: 'conf', pr: function (r) { return PR_ORDER[r.pr]; } };
+  var KEYS = { r: 'r', n: 'n', c: 'c', ch: function (r) { return r.ch.length; }, tvl: 'tvl', d7: function (r) { return r.d7 === null ? -1e9 : r.d7; }, b: 'b', conf: 'conf', age: function (r) { return r.age === null ? -1 : r.age; }, pr: function (r) { return PR_ORDER[r.pr]; } };
   function sorted(list, s) {
     var k = KEYS[s.sort] || 'r', get = typeof k === 'function' ? k : function (r) { return r[k]; }, d = s.dir === 'desc' ? -1 : 1;
     return list.slice().sort(function (a, b) { var x = get(a), y = get(b); return (x < y ? -1 : x > y ? 1 : 0) * d || a.r - b.r; });
@@ -93,7 +93,7 @@
     return '<section class="kpis" aria-label="Headline numbers">' +
       k(covered + ' / ' + R.counts.watchlist, 'watchlist covered', 'every house slug ranked') +
       k(String(rows.length), 'pre-token candidates', (rows.length - covered) + ' beyond the house list') +
-      k(usd(tvl), 'TVL with no token', 'across all candidates') +
+      k(usd(tvl), 'TVL with no token', R.counts.live + ' with a token kept off') +
       k(usd(val), 'implied launch value', 'sum of base cases') +
       k(String(now), 'farm now', 'of ' + rows.length + ' plans') +
       k(esc(top[0]), 'top category by TVL', esc(top.slice(1).join(' · '))) + '</section>';
@@ -121,11 +121,13 @@
         '<td class="hide-sm">' + esc(r.c) + '</td>' +
         '<td class="hide-md chainlist">' + esc(r.ch.slice(0, 2).join(', ')) + (r.ch.length > 2 ? ' +' + (r.ch.length - 2) : '') + '</td>' +
         '<td class="n"><div class="tvl"><span>' + usd(r.tvl) + '</span>' + trend(r) + '<span class="d7 ' + (r.d7 === null ? 'muted' : r.d7 >= 0 ? 'up' : 'down') + '">' + pct(r.d7) + '</span></div></td>' +
+        '<td class="n hide-sm">' + (r.age === null ? '<span class="muted">n/a</span>' : (r.age / 365).toFixed(1) + 'y') + '</td>' +
         '<td><div class="range"><span class="hide-sm">' + rangeBar(r) + '</span><b>' + usd(r.b) + '</b><small>' + usd(r.lo) + ' – ' + usd(r.hi) + ' · ' + r.m.toFixed(2) + '× TVL</small></div></td>' +
-        '<td class="n hide-sm"><span class="meter"><i style="width:' + r.conf + '%"></i></span>' + r.conf + '</td>' +
+        '<td class="n hide-sm nw"><span class="meter"><i style="width:' + r.conf + '%"></i></span>' + r.conf + '</td>' +
         '<td>' + pill(r.pr) + '</td></tr>';
     }).join('');
     return kpis() +
+      '<p class="howto"><b>How to read it:</b> rank = implied launch value, a size curve fitted on the ' + R.backtest.n + ' traded tokens in this snapshot (one per token family) plus a category premium. Blind test, each token left out and priced by the rest: off by ×' + Math.pow(10, R.backtest.full).toFixed(1) + ' typically vs ×' + Math.pow(10, R.backtest.flat).toFixed(1) + ' for a flat multiple. Each row opens its arithmetic, comparables and a farm plan netted to dollars. Traded tokens are under Already trading, not ranked.</p>' +
       '<form class="filters" role="search" onsubmit="return false">' +
       '<input type="search" id="q" placeholder="Search protocol, category or chain" aria-label="Search" value="' + esc(s.q) + '">' +
       '<select id="cat" aria-label="Category">' + opts(cats, s.cat, 'All categories') + '</select>' +
@@ -136,8 +138,8 @@
       '<label class="muted"><input type="checkbox" id="w"' + (s.w ? ' checked' : '') + '> Watchlist only</label></form>' +
       '<div class="chips" aria-live="polite"><span class="muted">' + (chips.length ? 'Filters:' : 'No filters: showing every candidate.') + '</span>' + chips.join('') + (chips.length ? '<button type="button" class="clear" data-unset="all">Clear all</button>' : '') + '</div>' +
       '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols ranked by implied launch value</caption><thead><tr>' +
-      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('b', 'Implied value (low – high)') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
-      '</tr></thead><tbody>' + (body || '<tr><td colspan="8" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>' +
+      th('r', '#', 'n') + th('n', 'Protocol') + th('c', 'Category', 'hide-sm') + th('ch', 'Chains', 'hide-md') + th('tvl', 'TVL · 7d', 'n') + th('age', 'No token for', 'n hide-sm') + th('b', 'Implied value (low – high)') + th('conf', 'Conf.', 'n hide-sm') + th('pr', 'Farm') +
+      '</tr></thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>' +
       '<p class="count">' + list.length + ' of ' + rows.length + ' candidates · rank is the model\'s value order; click a row for its math and farm plan.</p>';
   }
 
@@ -202,8 +204,8 @@
       '<div class="card"><h3>Against the tokenised market</h3>' + scatter(r) + '</div>' +
       '<div class="card"><h3>Comparables used</h3>' + peers(r) + '</div></div><div>' +
       '<div class="card"><h3>Why it is on the radar</h3><p style="margin:0">' + esc(r.why) + '</p>' + (r.fl.length ? '<ul class="risks">' + r.fl.map(function (f) { return '<li>⚑ ' + esc(f) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
-      '<div class="card"><h3>Farm plan</h3><div class="facts"><span>Chain <b>' + esc(r.chain) + '</b></span><span>Capital <b>' + usd(r.cap[0]) + ' → ' + usd(r.cap[1]) + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Est. per $1k <b>$' + r.k1.toFixed(2) + '</b></span><span>Gas <b>' + esc(r.gas) + '</b></span></div>' +
-      '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st) + '</span></label></li>'; }).join('') + '</ol></div>' +
+      '<div class="card"><h3>Farm plan</h3><div class="facts"><span>Chain <b>' + esc(r.chain) + '</b></span><span>Capital <b>' + usd(r.cap[0]) + ' → ' + usd(r.cap[1]) + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Est. per $1k <b>$' + r.k1.toFixed(2) + '</b></span><span>Gas <b>' + esc(r.gas) + '</b></span><span>Gas &amp; fees <b>~$' + r.tc + '</b></span><span>Expected drop <b>~$' + r.dp + '</b></span><span>Net <b class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</b></span><span>Hands-on <b>~' + r.hr + ' h</b></span></div>' +
+      '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st[0]) + '<span class="ct">' + (st[3] ? '<i class="when">' + esc(st[3]) + '</i>' : '') + '<i>Cost: ' + esc(st[1]) + '</i><i>Time: ' + esc(st[2]) + '</i></span></span></label></li>'; }).join('') + '</ol></div>' +
       '<div class="card"><h3>Risks</h3><ul class="risks">' + r.rk.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' +
       '<div class="card"><h3>TVL history in the snapshot</h3><p class="muted" style="margin:0 0 8px;font-size:12px">The snapshot records today\'s TVL and its 7-day change only; the earlier point is derived from them.</p>' + bars(prev, r) + '</div></div></div>' +
       '<p class="muted" style="font-size:12px">Estimates, not financial advice. DefiLlama records no token for ' + esc(r.n) + '; that is not proof it has none.</p>';
@@ -225,9 +227,9 @@
 
   function live() {
     var c = R.comps.slice().sort(function (a, b) { return b.mc - a.mc || (a.s < b.s ? -1 : 1); });
-    return '<div class="prose"><h2>Already trading: the comparables</h2><p>' + R.counts.live + ' protocols in the snapshot record a token; the ' + c.length + ' with a market cap set the multiples every candidate is valued on. They are kept off the board: their token exists. "vs curve" is each one\'s market cap against the size curve, the residual the category premiums are built from.</p></div>' +
-      '<div class="tablewrap"><table><thead><tr><th>Protocol</th><th>Token</th><th class="hide-sm">Category</th><th class="n">TVL</th><th class="n">Market cap</th><th class="n">Mcap/TVL</th><th class="n hide-sm">vs curve</th></tr></thead><tbody>' +
-      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + x.x.toFixed(2) + '×</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + times(x.e) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    return '<div class="prose"><h2>Already trading: the comparables</h2><p>' + R.counts.live + ' protocols in the snapshot record a token. Records sharing a token are one family (Aave V2, V3 and Horizon are one AAVE), its TVL summed and its market cap counted once: the ' + c.length + ' families with a market cap set the multiples every candidate is valued on. They are kept off the board: their token exists. "vs curve" is each one\'s market cap against the size curve, the residual the category premiums are built from.</p></div>' +
+      '<div class="tablewrap"><table><thead><tr><th>Protocol</th><th>Token</th><th class="n hide-sm">Records</th><th class="hide-sm">Category</th><th class="n">TVL</th><th class="n">Market cap</th><th class="n">Mcap/TVL</th><th class="n hide-sm">vs curve</th></tr></thead><tbody>' +
+      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="n hide-sm">' + x.rec + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + x.x.toFixed(2) + '×</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + times(x.e) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   }
   function excluded() {
     var x = R.excluded.slice().sort(function (a, b) { return b.tvl - a.tvl || (a.s < b.s ? -1 : 1); });
@@ -241,10 +243,15 @@
       '<h2>What this board claims</h2><p>For each protocol that records no token, what a token would be worth at launch if its record stayed as it is, and how to farm it. It does not predict whether or when a token launches. Snapshot: ' + esc(R.source) + ' (' + R.counts.protocols + ' protocols at $5M+ TVL).</p>' +
       '<h2>1. Who is on the board</h2><p><b>Live</b> (' + R.counts.live + '): a token symbol or CoinGecko id is recorded. <b>Excluded</b> (' + R.counts.excluded + '): no token recorded, but a Liquid Staking, Restaking, Bridge or CEX record, a name with wrapped/staked, an exchange\'s name, a version marker, or a first word shared with a protocol whose token trades. <b>Candidates</b> (' + rows.length + '): the rest, every one of the ' + R.counts.watchlist + ' house watchlist slugs included. Watchlist rows a rule doubts stay on, with a ⚑ flag (chain-native app, a chain, a stablecoin record) that lowers value and confidence.</p>' +
       '<h2>2. The value model</h2><pre>log₁₀ V = a + b·log₁₀(TVL) + δ_category + momentum + seasoning + chains + flags</pre>' +
-      '<p>The size curve is an ordinary least-squares fit of log market cap on log TVL over the <b>' + f.n + '</b> protocols whose token trades: a = ' + f.a + ', b = ' + f.b + ' (a 10× larger TVL earns about ' + Math.pow(10, f.b).toFixed(1) + '× the value, so big protocols get lower multiples). Residual s.d. ' + f.resid_sd + ' dex; leave-one-out mean absolute error ' + f.loo_mae + ' dex, a typical miss of ×' + err.toFixed(1) + ', which is why every row carries a range.</p>' +
+      '<p>The size curve is an ordinary least-squares fit of log market cap on log TVL over the <b>' + f.n + '</b> token families that trade (one per token, its records\' TVL summed): a = ' + f.a + ', b = ' + f.b + ' (a 10× larger TVL earns about ' + Math.pow(10, f.b).toFixed(1) + '× the value, so big protocols get lower multiples). Residual s.d. ' + f.resid_sd + ' dex; leave-one-out mean absolute error ' + f.loo_mae + ' dex, a typical miss of ×' + err.toFixed(1) + ', which is why every row carries a range.</p>' +
+      '<h2>2a. The blind test</h2><p>Each of the ' + R.backtest.n + ' families is left out in turn, the model is refitted on the rest, and the left-out market cap is predicted. Mean absolute error, in dex:</p><table class="math" style="max-width:520px"><tbody>' +
+      '<tr><td>Flat multiple (median market cap / TVL)</td><td>' + R.backtest.flat.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.flat).toFixed(2) + '</td></tr>' +
+      '<tr><td>Size curve alone</td><td>' + R.backtest.size.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.size).toFixed(2) + '</td></tr>' +
+      '<tr class="tot"><td>Size curve + shrunk category premium (used)</td><td>' + R.backtest.full.toFixed(3) + ' · ×' + Math.pow(10, R.backtest.full).toFixed(2) + '</td></tr></tbody></table>' +
+      '<p>The size curve is what earns its place: it beats a flat multiple by ' + Math.round((1 - Math.pow(10, R.backtest.size - R.backtest.flat)) * 100) + '% of the typical miss. The category premium adds little out of sample, which is why it is shrunk hard toward its sector; ' + Math.round(R.backtest.within_2x * 100) + '% of traded tokens land within 2× of their blind price. The momentum, seasoning and chain terms are stated priors, not fitted: the snapshot gives traded tokens no "time with no token" to test them on.</p>' +
       '<p><b>δ_category</b> is the median residual of the category\'s tokenised peers, shrunk toward its sector\'s with weight n / (n + ' + R.k + '); the sector\'s is shrunk toward zero the same way. <b>Momentum</b> = 2·log₁₀(1 + 7d change), within ±0.15. <b>Seasoning</b> = 0.08·min(years tracked with no token, 2) − 0.05: a new protocol\'s TVL is unproven, a long-running one\'s is sticky. <b>Chains</b> = 0.04·log₂(chain count), at most 0.15. <b>Flags</b> = −0.30 each. Low and high apply the peers\' residual quartiles.</p>' +
       '<h2>3. Confidence</h2><p>Starts at 50: + 4 per category peer (max 20), − 25 per dex of peer spread beyond 0.9, + 6 per dex of TVL above $50M, − 8 for no 7d change or a swing past 25%, − 8 for no listing date, − 6 if under 4 months old, − 18 per flag; held within 5–95.</p>' +
-      '<h2>4. Farm plans and priority</h2><p>Each plan is written from the protocol\'s sector, category, chains, TVL, age and trend: the cheapest chain it runs on, sector-specific actions, a test ticket and a full position scaled by confidence, a horizon by age, and the estimate <code>per $1k = ' + Math.round(R.user_share * 100) + '% × V × 1000 / TVL</code> (the share of a launch commonly given to users, pro rata). <b>Farm now</b>: no flag, confidence ≥ 55, 7d TVL above −12% and ≥ $10 per $1k. <b>Skip</b>: a flag, confidence &lt; 40 or under $4 per $1k. Otherwise <b>watch</b>.</p>' +
+      '<h2>4. Farm plans and priority</h2><p>Each plan is written from the protocol\'s sector, category, chains, TVL, age and trend: the cheapest chain it runs on, sector-specific actions, a test ticket and a full position scaled by confidence, a horizon by age, and the estimate <code>per $1k = ' + Math.round(R.user_share * 100) + '% × V × 1000 / TVL</code> (the share of a launch commonly given to users, pro rata). Each plan is netted: <code>net = expected drop on the full position − gas − bridge − running fees</code> (perp fees, swap fees or borrow interest over the horizon). <b>Farm now</b>: no flag, confidence ≥ 55, 7d TVL above −12% and a net of at least $50 and twice its cost. <b>Skip</b>: a flag, confidence &lt; 40, or a net loss. Otherwise <b>watch</b> (thin).</p>' +
       '<h2>Caveats</h2><p class="note">Estimates, not financial advice. The snapshot has no fees, revenue, raises, audits or TVL history, so the model uses none; market caps stand in for FDV. A record with no token may still have one. Points programmes and their rules change; check each protocol\'s own terms before depositing.</p></article>';
   }
 

@@ -71,7 +71,7 @@ main { padding: 20px 24px 8px; max-width: 1440px; margin: 0 auto; }
 /* Board table */
 .tablewrap { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { position: sticky; top: 0; background: var(--card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); z-index: 1; white-space: nowrap; }
 th button { all: unset; cursor: pointer; }
 th[aria-sort="ascending"] button::after { content: " ▲"; color: var(--accent); }
@@ -79,6 +79,7 @@ th[aria-sort="descending"] button::after { content: " ▼"; color: var(--accent)
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr:focus-visible { background: var(--sunk); outline: none; }
 td.n, th.n { text-align: right; }
+.nw { white-space: nowrap; }
 .pname { font-weight: 650; }
 .tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); }
 .tag.w { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
@@ -96,6 +97,11 @@ td.n, th.n { text-align: right; }
 .pill.now { background: var(--now-bg); color: var(--now); }
 .pill.watch { background: var(--watch-bg); color: var(--watch); }
 .pill.skip { background: var(--skip-bg); color: var(--skip); }
+.howto { margin: -4px 0 12px; font-size: 12.5px; color: var(--muted); }
+.howto b { color: var(--ink); }
+.ct { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+.ct i { font-style: normal; font-size: 11.5px; background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
+.ct i.when { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 700; }
 .count { color: var(--muted); font-size: 12px; margin: 8px 2px 0; }
 .empty { padding: 32px; text-align: center; color: var(--muted); }
 svg text { fill: var(--muted); font: 10px var(--sans); }
