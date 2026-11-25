@@ -309,6 +309,30 @@
       '<div class="tablewrap"><table><thead><tr><th>Record</th><th class="hide-sm">Category</th><th class="n">TVL</th><th>Why it is off the board</th></tr></thead><tbody>' +
       x.map(function (e) { return '<tr><td class="pname">' + esc(e.n) + '</td><td class="hide-sm">' + esc(e.c) + '</td><td class="n">' + usd(e.tvl) + '</td><td>' + esc(e.why) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   }
+  // Point 3: the hand-set constants, each with its effect on rank 1 and on the skip count. None is in the
+  // snapshot, so each is listed as an assumption and shown at a perturbed value, computed from the board rows.
+  function assumptionsTable() {
+    var rows = R.rows, baseRank = rows.reduce(function (a, x) { return x.b > a.b ? x : a; }, rows[0]).n;
+    var baseSkip = rows.filter(function (x) { return x.pr === 'skip'; }).length;
+    function rk(l) { return l.reduce(function (a, x) { return x.b > a.b ? x : a; }, l[0]).n; }
+    function sk(l) { return l.filter(function (x) { return x.pr === 'skip'; }).length; }
+    function prio(net, conf, nf) { return (nf > 0 || conf < 40 || net <= 0) ? 'skip' : 'watch'; }
+    function scen(fn, skipFn) { var l = rows.map(function (r) { var c = {}; for (var k in r) c[k] = r[k]; fn(c); c.pr = skipFn ? skipFn(c) : prio(c.net, c.conf, c.fl.length); return c; }); return { rank: rk(l), skip: sk(l) }; }
+    var us = scen(function (r) { r.net = Math.round(r.sl * (0.10 / 0.07) * r.oh - r.tc - r.tb); });
+    var tb = scen(function (r) { r.net = Math.round(r.sl * r.oh - r.tc - r.tb * (0.06 / 0.04)); });
+    var fo = scen(function (r) { var f = Math.pow(0.50 / 0.30, Math.min(2, r.fl.length)); r.oh = r.oh * f; r.b = r.b * f; r.net = Math.round(r.sl * r.oh - r.tc - r.tb); });
+    var cf = scen(null, function (c) { return (c.fl.length > 0 || c.conf < 45 || c.net <= 0) ? 'skip' : 'watch'; });
+    function eff(s) { return 'rank 1 ' + (s.rank === baseRank ? '<b>' + esc(baseRank) + '</b> (unchanged)' : '→ <b>' + esc(s.rank) + '</b>') + ' · ' + s.skip + ' skips (base ' + baseSkip + ')'; }
+    var data = [
+      ['Share of the value paid to users', '7%', 'net, slice', '10%', us],
+      ['T-bill yield given up over the hold', '4%', 'net, T-bill', '6%', tb],
+      ['Launch odds per caution flag', '×0.30', 'value, net (flagged rows)', '×0.50', fo],
+      ['Confidence to farm / to skip', '55 / 40', 'priority', '60 / 45', cf]
+    ];
+    return '<p class="muted">None of these is in the snapshot; each is an assumption, not a fitted number. The table shows the base effect (rank 1 and skip count) and the same two numbers at a perturbed value, so the reader can see what each one moves.</p>' +
+      '<table class="math" style="max-width:720px"><thead><tr><th>Assumption</th><th class="n">Value</th><th>Enters</th><th class="n">Tested at</th><th>Effect on rank 1 and skips</th></tr></thead><tbody>' +
+      data.map(function (d) { return '<tr><td>' + esc(d[0]) + '</td><td class="n">' + esc(d[1]) + '</td><td>' + esc(d[2]) + '</td><td class="n">' + esc(d[3]) + '</td><td>' + eff(d[4]) + '</td></tr>'; }).join('') + '</tbody></table>';
+  }
   function method() {
     var f = R.fit, o = R.odds, cal = R.cal;
     return '<article class="prose">' +
@@ -322,6 +346,7 @@
       '<table class="math" style="max-width:640px"><thead><tr><th>Odds model (each protocol left out)</th><th class="n">Log loss</th><th class="n">Brier</th><th>Used</th></tr></thead><tbody>' +
       o.tests.map(function (t) { return '<tr><td>' + esc(t.name) + (t.logloss > 3 ? ' <span class="muted">(does not converge: 7d growth alone separates the sample)</span>' : '') + '</td><td class="n">' + t.logloss.toFixed(3) + '</td><td class="n">' + t.brier.toFixed(3) + '</td><td>' + (t.name === o.pick ? '<b class="up">applied</b>' : '<span class="muted">rejected</span>') + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<h2>4. Farm verdicts</h2><p><code>net = ' + Math.round(R.user_share * 100) + '% × value if launched × position / TVL × odds − gas − fees − ' + Math.round(R.tbill * 100) + '% T-bill yield</code>. <b>Farm now</b>: no flag, confidence ≥ 55, 7d TVL above −12%, net ≥ $25 and ≥ its costs. <b>Skip</b>: a flag, confidence &lt; 40 or a net loss. Else <b>watch</b>.</p>' +
+      '<h2>5. Assumptions, not fitted</h2>' + assumptionsTable() +
       '<h2>Caveats</h2><p class="note">Estimates, not financial advice. The snapshot carries no fees, revenue, raises, audits or history; market caps stand in for FDV. A record with no token may still have one. The reader\'s assumptions are the reader\'s: they re-rank the board and are labelled as such.</p></article>';
   }
 
@@ -330,7 +355,7 @@
     var s = read(), focusId = document.activeElement && document.activeElement.id;
     document.getElementById('asof').textContent = 'Snapshot ' + R.as_of + ' · ' + rows.length + ' pre-token candidates ranked by implied launch value';
     app.innerHTML = s.view === 'live' ? live() : s.view === 'excluded' ? excluded() : s.view === 'method' ? method() : board(s);
-    var TABS = { board: ['Board', rows.length], live: ['Already trading', R.comps.length], excluded: ['Excluded', R.excluded.length], method: ['Method', 6] };
+    var TABS = { board: ['Board', rows.length], live: ['Already trading', R.comps.length], excluded: ['Excluded', R.excluded.length], method: ['Method', 7] };
     [].forEach.call(document.querySelectorAll('.tabs a'), function (t) {
       var n = TABS[t.dataset.view];
       if (n) t.textContent = n[0] + ' ' + n[1];

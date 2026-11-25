@@ -26,6 +26,7 @@ The second live review (`REVIEW.md`, not committed) listed 8 defects. Fixed in o
 
 1. **One selection rule for every term.** The size curve and the launch odds now share a single rule: a term is kept only when it lowers the held-out error by more than **1% relative** to the model without it. Applied to both, 7d growth drops out of the odds (0.537 vs 0.538 = 0.19% < 1%), `board.json` is recomputed, and the strip, waterfall, Method and these notes agree. The rule is stated in one line on Method §2.
 2. **One sector label.** The detail's comparables header and the scatter legend now read the same `peerInfo(r)` helper: one label from the data (the category when ≥3 tokenised peers share it, else the sector), so "Same sector (Other): N peers" and "filled: Other" can no longer disagree.
+3. **Hand-set constants are declared, not hidden.** None of the four (7% to users, 4% T-bill, ×0.30 per caution flag, confidence 55/40) is in the snapshot, so Method §5 lists each in one "assumptions, not fitted" table with the value it enters and its effect on rank 1 and the skip count, shown at a perturbed value (e.g. 10% to users → 148 skips; 6% T-bill → 187; ×0.50 per flag → unchanged; 60/45 confidence → 191). Rank 1 is Steakhouse Financial throughout.
 
 ## What changed from v7 (the model and page underneath)
 

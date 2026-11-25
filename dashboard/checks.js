@@ -55,7 +55,7 @@
   }
   /* 6. each tab's row count equals the number in its label */
   function tabs() {
-    var R = root.RADAR, want = { board: R.rows.length, live: R.comps.length, excluded: R.excluded.length, method: 6 }, bad = [], seen = 0;
+    var R = root.RADAR, want = { board: R.rows.length, live: R.comps.length, excluded: R.excluded.length, method: 7 }, bad = [], seen = 0;
     [].forEach.call(document.querySelectorAll('.tabs a'), function (a) {
       var m = /(\d[\d,]*)\s*$/.exec(a.textContent.trim());
       if (!m) return;
