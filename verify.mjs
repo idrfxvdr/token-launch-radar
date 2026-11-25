@@ -176,7 +176,7 @@ else {
     else if (m.method === 'Network.requestWillBeSent') net.push(m.params.request.url);
   };
   const send = (method, params = {}, ms = 60000) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params })); return new Promise((res, rej) => { const t = setTimeout(() => { pend.delete(i); rej(new Error(method + ' timed out after ' + ms + 'ms')); }, ms); pend.set(i, (m) => { clearTimeout(t); res(m); }); }); };
-  const ev = async (e) => { const r = await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }); if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
+  const ev = async (e, ms) => { const r = await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }, ms); if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
   await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1260, deviceScaleFactor: 1, mobile: false });
   const nav = async (h) => { await send('Page.navigate', { url: BASE + h }); await sleep(700); };
@@ -262,7 +262,7 @@ else {
     }
     location.hash = '#view=board';
     return out;
-  })()`);
+  })()`, 240000);
   const beBad = [];
   for (const d of detail) {
     scanText(d.txt, 'detail ' + d.s);
