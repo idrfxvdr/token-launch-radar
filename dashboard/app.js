@@ -10,6 +10,9 @@
   }
   function pct(x) { return x === null ? 'n/a' : (x >= 0 ? '+' : '') + x.toFixed(1) + '%'; }
   function times(x) { return '×' + Math.pow(10, x).toFixed(2); }
+  function mult(x) { return (x >= 0.1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toFixed(4)) + '×'; }
+  function vsCurve(c) { return times(Math.log10(c.mc) - (R.fit.a + R.fit.b * Math.log10(c.tvl))); }
+  function bePct(be) { return be >= 1 ? 'cannot break even (' + Math.round(be * 100) + '%)' : Math.round(be * 100) + '%'; }
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   var PR = { 'farm now': 'now', watch: 'watch', skip: 'skip' }, PR_ORDER = { 'farm now': 0, watch: 1, skip: 2 };
   function pill(p) { return '<span class="pill ' + PR[p] + '">' + esc(p) + '</span>'; }
@@ -88,17 +91,20 @@
   }
 
   function kpis() {
-    var tvl = 0, val = 0, now = 0, byCat = {};
-    rows.forEach(function (r) { tvl += r.tvl; val += r.b; if (r.pr === 'farm now') now++; byCat[r.c] = (byCat[r.c] || 0) + r.tvl; });
+    var tvl = 0, val = 0, byCat = {};
+    rows.forEach(function (r) { tvl += r.tvl; val += r.b; byCat[r.c] = (byCat[r.c] || 0) + r.tvl; });
     var top = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; })[0], covered = rows.filter(function (r) { return r.w; }).length;
+    var best = rows[0], near = rows[0], now = 0;
+    rows.forEach(function (r) { if (r.net > best.net) best = r; if (r.be < near.be) near = r; if (r.pr === 'farm now') now++; });
     function k(b, span, small) { return '<div class="kpi"><b>' + b + '</b><span>' + span + '</span><small>' + small + '</small></div>'; }
     return '<section class="kpis" aria-label="Headline numbers">' +
       k(covered + ' / ' + R.counts.watchlist, 'watchlist covered', 'every house slug ranked') +
       k(String(rows.length), 'pre-token candidates', (rows.length - covered) + ' beyond the house list') +
       k(usd(tvl), 'TVL with no token', R.counts.live + ' records with a token kept off') +
       k(usd(val), 'implied launch value', 'sum of base cases') +
-      k(String(now), 'farm now', 'of ' + rows.length + ' plans') +
-      k(esc(top), 'top category by TVL', 'the board spans ' + cats.length + ' categories') + '</section>' + split();
+      k((best.net >= 0 ? '+' : '−') + '$' + Math.abs(best.net), 'best net on a plan', 'nearest break-even ' + bePct(near.be)) +
+      k(esc(top), 'top category by TVL', 'the board spans ' + cats.length + ' categories') + '</section>' + split() +
+      '<p class="covline"><b>' + now + ' farm now</b> of ' + rows.length + ' plans — no row clears every test at once (no caution flag, confidence ≥ 55, 7d TVL above −12%, net ≥ $25 and ≥ its costs), so the board is ranked by implied value, not by green rows: the best net is ' + (best.net >= 0 ? '+' : '−') + '$' + Math.abs(best.net) + ' on ' + esc(best.n) + ', and the nearest to break-even needs ' + bePct(near.be) + ' launch odds.</p>';
   }
   function split() {
     var c = R.counts, parts = [['board', rows.length, 'pre-token candidates, ranked below', 'var(--accent)'], ['live', c.live, 'records whose token already trades: comparables', 'var(--pos)'], ['excluded', c.excluded, 'no token, but a product of a traded one', 'var(--peer)']];
@@ -109,10 +115,10 @@
     var f = R.fit, o = R.odds, t = R.tests.filter(function (x) { return x.applied; })[0] || R.tests[0], w = rows[0], a = assumptions(read()), wv = value(w, a);
     var terms = [['size', '10^(' + f.a + ' + ' + f.b + '·log₁₀ TVL)', t.name],
       ['carry', f.cap ? '7d capped ×' + f.cap : f.ridge ? '7d shrunk ×' + f.ridge : '7d not applied', f.cap || f.ridge ? 'applied' : 'rejected'],
-      ['time', 'F(a)=1/(1+e^−(' + o.c0 + '+' + o.c1 + 'a))', 'odds ' + o.n], ['odds', o.pick, 'log loss ' + o.logloss]];
+      ['time', 'F(a)=1/(1+e^−(' + o.c0 + '+' + o.c1 + 'a+' + o.c2 + '·log₁₀TVL+' + o.c3 + '·log₁₀(1+7d)))', 'fit ' + o.n + ' rows'], ['odds', o.pick, 'log loss ' + o.logloss]];
     return '<section class="strip" aria-label="The value model"><div class="sform"><span class="stag">Value</span><code>implied = if launched × launch odds</code>' +
       terms.map(function (x) { return '<span class="tchip"><b>' + x[0] + '</b> ' + esc(x[1]) + '<i class="' + (x[2] === 'rejected' ? 'rej' : 'ok') + '">' + esc(x[2]) + '</i></span>'; }).join('') +
-      '</div><div class="sworked"><b>#' + w.r + ' ' + esc(w.n) + '</b> ' + usd(w.tvl) + ' TVL → <b>' + usd(w.ifl) + '</b> if launched × ' + Math.round(wv.od * 100) + '% = <b>' + usd(wv.b) + '</b> implied <span class="muted">(range ' + usd(w.lo) + '–' + usd(w.hi) + '; LOO error ' + f.loo_mae + ' dex on ' + f.n + ' traded tokens)</span>' +
+      '</div><div class="sworked"><b>#' + w.r + ' ' + esc(w.n) + '</b> ' + usd(w.tvl) + ' TVL → <b>' + usd(w.ifl) + '</b> if launched × ' + Math.round(w.od * 100) + '% = <b>' + usd(wv) + '</b> implied <span class="muted">(range ' + usd(w.lo) + '–' + usd(w.hi) + '; LOO error ' + f.loo_mae + ' dex on ' + f.n + ' traded tokens)</span>' +
       (a.on ? ' <span class="yours">your assumptions: growth ×' + a.g + ', odds ×' + a.o + (a.cap ? ', capital ' + usd(a.cap) : '') + '</span>' : '') + '</div></section>';
   }
   function opts(list, cur, all) { return '<option value="">' + all + '</option>' + list.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); }
@@ -191,7 +197,7 @@
       cell('If launched', function (r) { return usd(r.ifl); }) +
       cell('Odds · implied', function (r) { return Math.round(r.od * 100) + '% · <b>' + usd(r.b) + '</b>'; }) +
       cell('Plan: cost · net', function (r) { return '$' + r.tc + ' · <span class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</span>'; }) +
-      cell('Hands-on · break-even', function (r) { return r.hr + ' h · ' + Math.round(r.be * 100) + '%'; }) +
+      cell('Hands-on · break-even', function (r) { return r.hr + ' h · ' + bePct(r.be); }) +
       cell('Main risk', function (r) { return '<span class="muted">' + esc(r.mr) + '</span>'; }) + '</table></div></section>';
   }
 
@@ -204,7 +210,7 @@
     function X(v) { return P + (v - x0) / (x1 - x0) * (W - P - 10); }
     function Y(v) { return H - 22 - (v - y0) / (y1 - y0) * (H - 32); }
     var g = '', t;
-    for (t = x0; t <= x1; t++) g += '<line x1="' + X(t) + '" y1="10" x2="' + X(t) + '" y2="' + (H - 22) + '" stroke="var(--line)"/><text x="' + X(t) + '" y="' + (H - 8) + '" text-anchor="middle">' + dec(t) + '</text>';
+    for (t = x0; t <= x1; t++) g += '<line x1="' + X(t) + '" y1="10" x2="' + X(t) + '" y2="' + (H - 22) + '" stroke="var(--line)"/><text x="' + X(t) + '" y="' + (H - 8) + '" text-anchor="' + (t === x0 ? 'start' : t === x1 ? 'end' : 'middle') + '">' + dec(t) + '</text>';
     for (t = y0; t <= y1; t++) g += '<line x1="' + P + '" y1="' + Y(t) + '" x2="' + (W - 10) + '" y2="' + Y(t) + '" stroke="var(--line)"/><text x="' + (P - 4) + '" y="' + (Y(t) + 3) + '" text-anchor="end">' + dec(t) + '</text>';
     g += '<line x1="' + X(x0) + '" y1="' + Y(R.fit.a + R.fit.b * x0) + '" x2="' + X(x1) + '" y2="' + Y(R.fit.a + R.fit.b * x1) + '" stroke="var(--muted)" stroke-dasharray="5 4"/>';
     comps.forEach(function (c) {
@@ -213,7 +219,8 @@
     });
     var k = r.ifl / r.b, cx = X(Math.log10(r.tvl));
     g += '<line x1="' + cx + '" y1="' + Y(Math.log10(r.lo * k)) + '" x2="' + cx + '" y2="' + Y(Math.log10(r.hi * k)) + '" stroke="var(--hi)" stroke-width="3" stroke-linecap="round"/><circle cx="' + cx + '" cy="' + Y(Math.log10(r.ifl)) + '" r="6" fill="var(--bg)" stroke="var(--hi)" stroke-width="3"/>';
-    g += '<text x="' + (cx + 9) + '" y="' + (Y(Math.log10(r.ifl)) + 4) + '" style="fill:var(--ink);font-weight:700">' + esc(r.n) + ' if launched ' + usd(r.ifl) + '</text>';
+    var lbl = esc(r.n) + ' if launched ' + usd(r.ifl), flip = cx > W * 0.55;
+    g += '<text x="' + (flip ? cx - 9 : cx + 9) + '" y="' + (Y(Math.log10(r.ifl)) + 4) + '" text-anchor="' + (flip ? 'end' : 'start') + '" style="fill:var(--ink);font-weight:700">' + lbl + '</text>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Market cap against TVL for ' + comps.length + ' tokenised protocols">' + g + '</svg>' +
       '<p class="muted" style="font-size:12px;margin:4px 0 0">Dots: the ' + comps.length + ' families whose token trades (filled: ' + esc(r.c) + '; grey: ' + esc(r.sec) + '). Dashed: the size curve. Bar and ring: this protocol if launched, low–high to base.</p>';
   }
@@ -221,10 +228,10 @@
     var same = R.comps.filter(function (c) { return c.c === r.c; }), basis = same.length >= 3 ? same : R.comps.filter(function (c) { return c.sec === r.sec; });
     var near = basis.slice().sort(function (a, b) { return Math.abs(Math.log10(a.tvl / r.tvl)) - Math.abs(Math.log10(b.tvl / r.tvl)) || (a.s < b.s ? -1 : 1); }).slice(0, 4);
     if (!near.length) return '<p class="muted">No tokenised peer in this sector: the size curve is the market-wide one.</p>';
-    var mult = basis.map(function (c) { return c.x; }).sort(function (a, b) { return a - b; }), med = mult[Math.floor(mult.length / 2)];
-    return '<p class="muted" style="margin:0 0 6px">' + (same.length >= 3 ? 'Same category' : 'Same sector (' + esc(r.sec) + ')') + ': ' + basis.length + ' tokenised peers, median market cap / TVL ' + med.toFixed(2) + '×; this row\'s implied ' + r.m.toFixed(2) + '×.</p>' +
+    var mults = basis.map(function (c) { return c.x; }).sort(function (a, b) { return a - b; }), med = mults[Math.floor(mults.length / 2)];
+    return '<p class="muted" style="margin:0 0 6px">' + (same.length >= 3 ? 'Same category' : 'Same sector (' + esc(r.sec) + ')') + ': ' + basis.length + ' tokenised peers, median market cap / TVL ' + mult(med) + '; this row\'s implied ' + mult(r.m) + '.</p>' +
       '<table class="peers"><thead><tr><th>Peer (nearest TVL)</th><th class="n">TVL</th><th class="n">Mcap</th><th class="n">Mcap/TVL</th><th class="n">vs curve</th></tr></thead><tbody>' +
-      near.map(function (c) { return '<tr><td>' + esc(c.n) + ' <span class="muted">' + esc(c.sym) + '</span></td><td class="n">' + usd(c.tvl) + '</td><td class="n">' + usd(c.mc) + '</td><td class="n">' + c.x.toFixed(2) + '×</td><td class="n">' + times(c.e) + '</td></tr>'; }).join('') + '</tbody></table>';
+      near.map(function (c) { return '<tr><td>' + esc(c.n) + ' <span class="muted">' + esc(c.sym) + '</span></td><td class="n">' + usd(c.tvl) + '</td><td class="n">' + usd(c.mc) + '</td><td class="n">' + mult(c.x) + '</td><td class="n">' + vsCurve(c) + '</td></tr>'; }).join('') + '</tbody></table>';
   }
   function waterfall(r) {
     var t = r.t, carried = r.tvl * t.carry;
@@ -265,9 +272,9 @@
       '<div class="card"><h3>Why it is on the radar</h3><p style="margin:0">' + esc(r.why) + '</p>' + (r.fl.length ? '<ul class="risks">' + r.fl.map(function (f) { return '<li>⚑ ' + esc(f) + '</li>'; }).join('') + '</ul>' : '') + '</div>' +
       '<div class="card"><h3>Farm plan</h3><div class="facts">' +
       '<span>Chain <b>' + esc(r.chain) + '</b></span><span>Capital at risk <b>' + usd(r.cap[0]) + ' → ' + usd(r.cap[1]) + '</b></span><span>Hands-on <b>~' + r.hr + ' h</b></span><span>Gas &amp; fees <b>~$' + r.tc + '</b></span>' +
-      '<span>Expected <b>~$' + r.dp + '</b></span><span>Net <b class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</b></span><span>Break-even odds <b>' + Math.round(r.be * 100) + '%</b></span><span>Slice if launched <b>$' + r.sl + '</b></span><span>× odds <b>' + Math.round(r.oh * 100) + '%</b></span><span>T-bill given up <b>$' + r.tb + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Gas <b>' + esc(r.gas) + '</b></span></div>' +
+      '<span>Expected <b>~$' + r.dp + '</b></span><span>Net <b class="' + (r.net > 0 ? 'up' : 'down') + '">' + (r.net >= 0 ? '+' : '−') + '$' + Math.abs(r.net) + '</b></span><span>Break-even odds <b>' + bePct(r.be) + '</b></span><span>Slice if launched <b>$' + r.sl + '</b></span><span>× odds <b>' + Math.round(r.oh * 100) + '%</b></span><span>T-bill given up <b>$' + r.tb + '</b></span><span>Horizon <b>' + r.wk + ' weeks</b></span><span>Gas <b>' + esc(r.gas) + '</b></span></div>' +
       '<div class="facts2"><div><b>Main risk</b><p>' + esc(r.mr) + '</p></div><div><b>Stop rule</b><p>' + esc(r.sr) + '</p></div></div>' +
-      '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st[0]) + '<span class="ct">' + (st[3] ? '<i class="when">' + esc(st[3]) + '</i>' : '') + '<i>Cost: ' + esc(st[1]) + '</i><i>Time: ' + esc(st[2]) + '</i></span></span></label></li>'; }).join('') + '</ol></div>' +
+      '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st[0]) + ' <span class="ct">' + (st[3] ? '<i class="when">' + esc(st[3]) + ' · </i>' : '') + '<i>Cost ' + esc(st[1]) + '</i> · <i>Time ' + esc(st[2]) + '</i></span></span></label></li>'; }).join('') + '</ol></div>' +
       '<div class="card"><h3>Risks</h3><ul class="risks">' + r.rk.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' +
       '<div class="card"><h3>Launch odds from time with no token</h3>' + oddsChart(r) + '</div></div></div>';
     panel.onchange = function (e) {
@@ -284,7 +291,7 @@
     var c = R.comps.slice().sort(function (a, b) { return b.mc - a.mc || (a.s < b.s ? -1 : 1); });
     return '<div class="prose"><h2>Already trading: the comparables</h2><p><b>' + R.counts.live + '</b> records carry a token and are kept off the board. Records sharing a symbol form one family (TVL summed, market cap counted once): these <b>' + c.length + '</b> families price every candidate. "vs curve" is market cap against the size curve.</p></div>' +
       '<div class="tablewrap"><table><thead><tr><th>Protocol</th><th>Token</th><th class="hide-sm">Category</th><th class="n">TVL</th><th class="n">Market cap</th><th class="n">Mcap/TVL</th><th class="n hide-sm">vs curve</th><th>Why it is not ranked</th></tr></thead><tbody>' +
-      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + x.x.toFixed(2) + '×</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + times(x.e) + '</td><td class="muted">Token ' + esc(x.sym) + ' already trades — used as a comparable, not a launch candidate.</td></tr>'; }).join('') + '</tbody></table></div>';
+      c.map(function (x) { return '<tr><td class="pname">' + esc(x.n) + '</td><td>' + esc(x.sym) + '</td><td class="hide-sm">' + esc(x.c) + '</td><td class="n">' + usd(x.tvl) + '</td><td class="n">' + usd(x.mc) + '</td><td class="n">' + mult(x.x) + '</td><td class="n hide-sm ' + (x.e >= 0 ? 'up' : 'down') + '">' + vsCurve(x) + '</td><td class="muted">Token ' + esc(x.sym) + ' already trades — used as a comparable, not a launch candidate.</td></tr>'; }).join('') + '</tbody></table></div>';
   }
   function excluded() {
     var x = R.excluded.slice().sort(function (a, b) { return b.tvl - a.tvl || (a.s < b.s ? -1 : 1); });

@@ -249,9 +249,10 @@
     rows.forEach(function (r, j) { (cats[r.cat] = cats[r.cat] || []).push(errs[j]); });
     for (var c in cats) cats[c] = group(cats[c]);
     var w = lsq(rows, pick.feats);
+    var insample = rows.map(function (r, j) { return r.y - dot(w, design(pick.feats, r)); });
     var comps = fams.map(function (p, j) {
       return { slug: p.slug, name: p.name, category: p.category, symbol: p.symbol, records: p.records, tvl: p.tvl, mcap: p.mcap,
-        multiple: r3(p.mcap / p.tvl), resid: r3(errs[j]), x: errs[j] };
+        multiple: r3(p.mcap / p.tvl), resid: r3(insample[j]), x: insample[j] };
     });
     var pts = oddsPoints(snap, verdicts), otests = oddsTests(pts), opick = otests[1];
     for (i = 2; i < otests.length; i++) if (otests[i].logloss < opick.logloss - 1e-9) opick = otests[i];

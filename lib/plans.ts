@@ -42,8 +42,15 @@ const MAINNET = new Set(['Ethereum', 'Bitcoin']);
 function pickChain(chains: string[]): string {
   return chains.find((c) => !MAINNET.has(c)) ?? chains[0] ?? 'Ethereum';
 }
-const usd = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${Math.round(n)}`;
-const big = (n: number) => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : `$${(n / 1e6).toFixed(1)}M`;
+const usd = (n: number) => {
+  const a = Math.abs(n);
+  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `$${(n / 1e3).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
+  return `$${Math.round(n)}`;
+};
+const big = (n: number) => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}k` : `$${Math.round(n)}`;
 
 interface Ctx { p: Protocol; v: Valuation; chain: string; cheap: boolean; gas: number; ticket: number; full: number; weeks: number; per1k: number; c7: number; age: number | null; cat: string; }
 
@@ -125,10 +132,10 @@ function mainRisk(p: Protocol, v: Valuation, verdict: Verdict, sector: string, w
 }
 
 /** The rule that ends the plan, with the numbers from this protocol's own record. */
-function stopRule(x: Ctx, f: { slice: number; odds: number }): string {
+function stopRule(x: Ctx, f: { slice: number; odds: number; breakeven: number }): string {
   const floor = Math.round(x.p.tvl_usd * 0.85);
-  const tail = f.odds < 0.2 ? `it needs ${Math.round((x.full * 0.02) / Math.max(1, f.slice) * 100)}% odds to break even` : `the model's break-even is ${Math.round((x.full * 0.02) / Math.max(1, f.slice) * 100)}% odds`;
-  return `Stop if TVL stays under ${usd(floor)} (15% below today's ${usd(x.p.tvl_usd)}) for two straight weeks, or if no points programme is confirmed within ${x.weeks} weeks: withdraw to the ${usd(x.ticket)} test ticket and wait, because ${tail}.`;
+  const tail = f.breakeven >= 1 ? `it cannot break even at any odds (the position needs ${(f.breakeven * 100).toFixed(0)}% odds)` : `the model's break-even is ${Math.round(f.breakeven * 100)}% odds`;
+  return `Stop if TVL stays under ${big(floor)} (15% below today's ${big(x.p.tvl_usd)}) for two straight weeks, or if no points programme is confirmed within ${x.weeks} weeks: withdraw to the ${usd(x.ticket)} test ticket and wait, because ${tail}.`;
 }
 
 export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string, m: Fitted): Plan {
@@ -177,11 +184,12 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
 
   // The rule itself is RadarModel.priority (dashboard/model.js); here it is put into words.
   const priority: Priority = M.priority(verdict.flags.length, v.confidence, c7, net, total);
+  const beText = f.breakeven >= 1 ? `it cannot break even at any odds (needs ${(f.breakeven * 100).toFixed(0)}%)` : `break-even ${Math.round(f.breakeven * 100)}% odds`;
   let why: string;
   if (verdict.flags.length > 0) why = `Skip: ${verdict.flags[0]}.`;
   else if (v.confidence < 40) why = `Skip: confidence ${v.confidence}/100 is too low to commit capital on.`;
-  else if (net <= 0) why = `Skip: ${usd(full)} expects about $${drop} (a $${f.slice} slice x ${Math.round(f.odds * 100)}% launch odds) against $${total} of gas and fees and $${f.tbill} of T-bill yield given up: it needs ${Math.round(f.breakeven * 100)}% odds to break even.`;
-  else if (priority === 'farm now') { why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected less $${total} gas and fees and $${f.tbill} of T-bill yield; break-even odds ${Math.round(f.breakeven * 100)}%), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
+  else if (net <= 0) why = `Skip: ${usd(full)} expects about $${drop} (a $${f.slice} slice x ${Math.round(f.odds * 100)}% launch odds) against $${total} of gas and fees and $${f.tbill} of T-bill yield given up: ${beText}.`;
+  else if (priority === 'farm now') { why = `Farm now: ${usd(full)} nets about $${net} ($${drop} expected less $${total} gas and fees and $${f.tbill} of T-bill yield; ${beText}), confidence ${v.confidence}/100, TVL ${c7 >= 0 ? '+' : ''}${c7.toFixed(1)}% in 7d.`; }
   else { why = `Watch (thin): nets about $${net} on ${usd(full)}${c7 <= -12 ? ` and TVL fell ${c7.toFixed(1)}% in 7d` : v.confidence < 55 ? ` at confidence ${v.confidence}/100` : ''}; enter on a points announcement or a turn in TVL.`; }
   const minutes = steps.reduce((s, st) => s + [...st.time.matchAll(/(\d+) min(?! a week)/g)].reduce((a, m) => a + Number(m[1]), 0), 0) + weeks * 10;
 

@@ -158,7 +158,7 @@ check('dossier_matches', Buffer.from(rebuilt).equals(written) && written.length 
 section('headless page');
 const PORT = 9360;
 const BASE = `file://${A}/dashboard/index.html`;
-const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, '--no-sandbox', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', '--user-data-dir=/tmp/opencode/verify-chrome', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--hide-scrollbars', '--force-device-scale-factor=1', '--user-data-dir=/tmp/opencode/verify-chrome', 'about:blank'], { stdio: 'ignore' });
 const j = async (p, o) => (await fetch(`http://127.0.0.1:${PORT}${p}`, o)).json();
 let ver = null;
 for (let i = 0; i < 80; i++) { try { ver = await j('/json/version'); break; } catch { await sleep(200); } }
@@ -175,7 +175,7 @@ else {
     else if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') errors.push(m.params.entry.text);
     else if (m.method === 'Network.requestWillBeSent') net.push(m.params.request.url);
   };
-  const send = (method, params = {}) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params })); return new Promise((r) => pend.set(i, r)); };
+  const send = (method, params = {}, ms = 60000) => { const i = ++id; ws.send(JSON.stringify({ id: i, method, params })); return new Promise((res, rej) => { const t = setTimeout(() => { pend.delete(i); rej(new Error(method + ' timed out after ' + ms + 'ms')); }, ms); pend.set(i, (m) => { clearTimeout(t); res(m); }); }); };
   const ev = async (e) => { const r = await send('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }); if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
   await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1260, deviceScaleFactor: 1, mobile: false });
@@ -224,6 +224,58 @@ else {
     }
   }
   check('every column sorts', sortErr.length === 0, sortErr.length ? sortErr.join(', ') : `${keys.length} columns, both directions`);
+
+  // rendered text of every tab and EVERY row's detail sheet: no NaN/undefined/Infinity/$null, no $12345k
+  const textBad = [];
+  const textPats = [[/NaN/, 'NaN'], [/undefined/, 'undefined'], [/Infinity/, 'Infinity'], [/\$null/, '$null'], [/\d{4,}(\.\d+)?k/, 'big-k']];
+  const scanText = (txt, where) => { for (const [re, name] of textPats) { const m = re.exec(txt); if (m) textBad.push(`${where}: ${name} (${m[0]})`); } };
+  for (const v of ['board', 'live', 'excluded', 'method']) {
+    await ev(`location.hash='#view=${v}'`); await sleep(90);
+    scanText(await ev(`document.getElementById('app').innerText`), 'tab ' + v);
+  }
+  // the value strip must read row #1's own odds and value (no NaN)
+  await ev(`location.hash='#view=board'`); await sleep(90);
+  const stripTxt = await ev(`document.querySelector('.sworked').innerText`);
+  const r1 = pageRows[0];
+  const usd1 = (n) => { const a = Math.abs(n); return a >= 1e9 ? '$' + (n / 1e9).toFixed(a >= 1e10 ? 1 : 2) + 'B' : a >= 1e6 ? '$' + (n / 1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M' : a >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n); };
+  const stripOk = stripTxt.includes(Math.round(r1.od * 100) + '%') && stripTxt.includes(usd1(r1.b)) && !/NaN/.test(stripTxt);
+  check('strip value equals row #1', stripOk, stripOk ? `#1 ${r1.n}: ${Math.round(r1.od * 100)}% and ${usd1(r1.b)}, no NaN` : `strip "${stripTxt.slice(0, 90)}" != ${Math.round(r1.od * 100)}% / ${usd1(r1.b)}`);
+  // every detail sheet: break-even in the plan equals the stop rule, "cannot break even" above 100%.
+  // One in-page pass (not 191 outside round-trips): set the hash, wait for the sheet to show the right
+  // row, read the panel. Keeps the renderer in one evaluate and never hangs the socket.
+  const slugs = await ev(`window.RADAR.rows.map(r=>r.s)`);
+  const detail = await ev(`(async () => {
+    const out = [];
+    for (const r of window.RADAR.rows) {
+      location.hash = '#p=' + r.s;
+      let ok = false;
+      for (let i = 0; i < 40; i++) {
+        await new Promise(res => setTimeout(res, 20));
+        const sh = document.getElementById('sheet'), p = document.getElementById('panel');
+        if (sh && !sh.hidden && p && /Break-even odds/.test(p.innerText)) { ok = true; break; }
+      }
+      const p = document.getElementById('panel');
+      const facts = [...p.querySelectorAll('.facts span')].map(x => x.innerText);
+      const beFact = facts.find(x => /Break-even odds/.test(x)) || '';
+      const sr = [...p.querySelectorAll('.facts2 p')].map(x => x.innerText).join(' ');
+      out.push({ s: r.s, ok, beFact, sr, txt: p.innerText });
+    }
+    location.hash = '#view=board';
+    return out;
+  })()`);
+  const beBad = [];
+  for (const d of detail) {
+    scanText(d.txt, 'detail ' + d.s);
+    const beImp = /cannot break even/.test(d.beFact), srImp = /cannot break even/.test(d.sr);
+    const beNum = (/\d+/.exec(d.beFact) || [])[0];
+    const srM = /break-even is (\d+)%/.exec(d.sr) || /needs (\d+)%/.exec(d.sr);
+    const srNum = srM ? srM[1] : null;
+    if (!d.ok || beImp !== srImp || (!beImp && beNum !== srNum)) beBad.push(`${d.s}: plan "${d.beFact.replace(/\s+/g, ' ').trim()}" vs stop "${(d.sr.match(/break-even[^.]*|cannot break even[^.]*/) || [''])[0].trim()}"`);
+    if (beBad.length > 8) break;
+  }
+  await ev(`location.hash='#view=board'`); await sleep(60);
+  check('rendered text clean (all tabs + every detail)', textBad.length === 0, textBad.length ? textBad.slice(0, 6).join('; ') : `${slugs.length} detail sheets + 4 tabs: no NaN/undefined/Infinity/$null/big-k`);
+  check('break-even equal in plan and stop rule', beBad.length === 0, beBad.length ? beBad.slice(0, 5).join('; ') : `all ${slugs.length} rows: one break-even number, "cannot break even" above 100%`);
 
   // overflow at 3 widths, both themes
   const over = [];

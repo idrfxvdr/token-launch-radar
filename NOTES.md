@@ -6,14 +6,40 @@ Branch `radar-v8`, cut from `radar-v7`. No push, no submit, no pin. Everything b
 
 A program (`main.ts`, Node 22, standard library only, no network) that reads the sealed DefiLlama snapshot, classifies every protocol, values each pre-token candidate against the snapshot's own traded tokens, writes a farm plan per row, and renders a static dashboard beside `board.json` and `data.js`. The page re-runs `dashboard/model.js` on the raw snapshot in the browser and checks every number against the board (the checks strip).
 
-## What changed from v7
+## Review round — the 11 defects, all fixed
 
-1. **Live "checked in this browser" strip** (`dashboard/checks.js`, mounted by `app.js`). Six checks, each expandable, every number recomputed from `window.RADAR` — never asserted: the model re-run reproduces every board value, watchlist coverage, ranks 1..N non-increasing, no ranked row records a token, every plan has 3–12 steps each with a cost and a time, and every tab's label equals its row count. It runs `RadarModel.fit` in the page (~5 s) and shows `✓ 6 of 6`.
-2. **The value model, tested term by term** (`dashboard/model.js`). Leave-one-out on the snapshot's traded-token families decides which terms are applied: a term is kept only when it lowers the held-out error by more than `GAIN = 0.005` dex. The 7-day growth variants all lose, so growth is **not** in the size curve; it enters through the launch-odds logistic instead. The low–high range is the leave-one-out error quartiles, so calibration is honest (inside 0.488 against a nominal 0.5). The Method tab and the board strip state the fitted formula, the term table and the calibration, all read from the data.
-3. **Farm plans with cost and time** (`lib/plans.ts`). Each row's plan has a test ticket and a full position, a chain chosen for gas, concrete steps per category and chain, and a main risk and stop rule. Every step carries `Cost:` and `Time:`; the plan states the break-even odds. Steps are written from the protocol (category + chain + TVL), and a build-time assertion rejects any two different-category rows that share step text once names and numbers are removed.
-4. **The page** (`dashboard/app.js`, `app.css`, `index.html`): board first (header, one KPI row, a slim ≤120 px model strip, the checks strip, a toolbar, then the rows), every column sortable, filters for category / chain / TVL band / confidence / priority / watchlist-only, hash state, keyboard (arrows, Enter, Esc, `/`), CSV export, a compare tray (≤3), and an assumptions drawer labelled "your assumptions, not the model's" that re-ranks live. The detail sheet has the value waterfall, the tokenised-market scatter, the comparables, the farm plan and the risks.
+The live review (`REVIEW.md`, not committed) listed 11 defects. All are fixed, and `verify.mjs` now fails on the unfixed build and passes on this one (evidence below).
+
+1. **Value strip read `NaN%` / `$NaN`.** The strip used a value helper that did not match the board row. It now reads the same fields the row uses: `#1 Steakhouse Financial $2.75B TVL → $92.0M if launched × 49% = $44.8M implied`.
+2. **TIME chip showed the wrong odds formula.** It printed the age-only `F(a)` while the applied model is age + TVL + 7d. The strip now prints the applied `F(a)=1/(1+e^−(c0+c1·a+c2·log₁₀TVL+c3·log₁₀(1+7d)))` and drops the bare "odds 512" (the fit row count is shown as `n 512` on the odds chip, not as "odds").
+3. **Break-even contradiction (`438%` vs `857%`).** One definition now: `bePct(be)` prints `cannot break even (N%)` when `be ≥ 1` and `N%` otherwise; the stop rule reads the same `f.breakeven`. Plan facts and stop rule always agree.
+4. **Stop-rule money `$2340884.3k`.** `usd` in `lib/plans.ts` now formats `$2.34B` / `$2.75B` (and `$…T` above 1e12); no `\d{4,}k` survives on any row.
+5. **Step meta had no separators.** Steps now read `Day 0 · Cost $0 · Time 10 min` (spaced, tabular).
+6. **Scatter labels ran outside the plot; last x tick cut.** Labels flip to the left of the point when they would overflow, and the end ticks anchor `start`/`end` so `$100B` is whole.
+7. **Peer `VS CURVE` / `MCAP/TVL` did not match the printed curve; `0.00x`.** Both are recomputed from the full-fit size curve `10^(a+b·log₁₀TVL)` (POL by hand: 10.19× vs curve, 0.352× mcap/TVL), and `mult()` prints more digits below 0.1 (`0.006×`, `0.0010×`).
+8. **`0 farm now of 191` tile.** Thresholds unchanged (no green rows manufactured). The tile now reads `+ $37 best net on a plan` with `nearest break-even 24%`, and the coverage line names the best net and the nearest break-even in one sentence.
+9. **`verify.mjs` checks the rendered text.** Three checks added: the strip equals board row #1 (no NaN), the rendered text of all four tabs and **every** detail sheet is free of `NaN` / `undefined` / `Infinity` / `$null` / `\d{4,}(\.\d+)?k`, and the plan break-even equals the stop rule on all 191 rows.
+
+## What changed from v7 (the model and page underneath)
+
+1. **Live "checked in this browser" strip** (`dashboard/checks.js`, mounted by `app.js`). Six checks, each expandable, every number recomputed from `window.RADAR` — never asserted: the model re-run reproduces every board value, watchlist coverage, ranks 1..N non-increasing, no ranked row records a token, every plan has 3–12 steps each with a cost and a time, and every tab's label equals its row count. It runs `RadarModel.fit` in the page and shows `✓ 6 of 6`.
+2. **The value model, tested term by term** (`dashboard/model.js`). Leave-one-out on the snapshot's traded-token families decides which terms are applied: a term is kept only when it lowers the held-out error by more than `GAIN = 0.005` dex. The 7-day growth variants all lose, so growth is **not** in the size curve; it enters through the launch-odds logistic instead. The low–high range is the leave-one-out error quartiles.
+3. **Farm plans with cost and time** (`lib/plans.ts`). Each row's plan has a test ticket and a full position, a chain chosen for gas, concrete steps per category and chain, and a main risk and stop rule. Every step carries `Cost:` and `Time:`; the plan states the break-even odds.
+4. **The page** (`dashboard/app.js`, `app.css`, `index.html`): board first (header, one KPI row, a slim model strip, the checks strip, a toolbar, then the rows), every column sortable, filters for category / chain / TVL band / confidence / priority / watchlist-only, hash state, keyboard, CSV export, a compare tray (≤3), and an assumptions drawer labelled "your assumptions, not the model's".
 5. **Styling**: one palette, one type scale, 8 px spacing, light and dark, visible focus, no horizontal overflow at 1440 / 1024 / 390.
-6. **Screenshots** regenerated from this build at 1440×1260: `1-board`, `2-detail`, `3-filtered` (watchlist only, sorted by net), `4-method` (term tests + calibration + odds).
+6. **Screenshots** regenerated from this build at 1440×1260: `1-board`, `2-detail`, `3-filtered` (watchlist only, confidence ≥ 40, sorted by net — 33 rows), `4-method`.
+
+## Fail-first, then pass
+
+`verify.mjs` was run against the unfixed `HEAD` worktree (`dc1fef1`) with the new checks in place: **15/18**, the three new checks failing with the exact defects —
+
+```
+FAIL  strip value equals row #1  — strip "#1 Steakhouse Financial $2.75B TVL → $92.0M if launched × NaN% = $NaN implied …" != 49% / $44.8M
+FAIL  rendered text clean (all tabs + every detail)  — tab board: NaN (NaN); detail steakhouse-financial: big-k (2340884.3k); …
+FAIL  break-even equal in plan and stop rule  — steakhouse-financial: plan "Break-even odds 438%" vs stop "break-even is 857% odds"; …
+```
+
+The same harness on this tree is **18/18** (full output below).
 
 ## `verify.mjs` — true output
 
@@ -27,43 +53,46 @@ token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 liv
 
 == result ==
 PASS  two runs are byte-identical  — 12 files, all equal
-PASS  dashboard_files  — 5 files, 88567 bytes, html/css/js=true/true/true, network=none
+PASS  dashboard_files  — 5 files, 90114 bytes, html/css/js=true/true/true, network=none
 PASS  board_file  — 191 rows, all slugs known, values positive whole
 PASS  sorted_by_value  — ranks 1..191 once each=true, rises=0, distinct values=191
 PASS  coverage  — 40/40 watchlist slugs on the board
 PASS  farm_steps  — every row 3-12 steps (6-7), each 20-600 chars
-PASS  screenshots  — 1-board.jpg 228818B, 2-detail.jpg 252312B, 3-filtered.jpg 225525B, 4-method.jpg 168904B
-PASS  dossier_matches  — written 1235123 bytes, rebuilt 1235123 bytes, equal=true
+PASS  screenshots  — 1-board.jpg 277080B, 2-detail.jpg 299450B, 3-filtered.jpg 246874B, 4-method.jpg 203600B
+PASS  dossier_matches  — written 1436954 bytes, rebuilt 1436954 bytes, equal=true
 PASS  checks strip 6/6  — ✓ 6 of 6 checks passed in this browser
 PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":6}
 PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":18,"w":40}
 PASS  every column sorts  — 9 columns, both directions
+PASS  strip value equals row #1  — #1 Steakhouse Financial: 49% and $44.8M, no NaN
+PASS  rendered text clean (all tabs + every detail)  — 191 detail sheets + 4 tabs: no NaN/undefined/Infinity/$null/big-k
+PASS  break-even equal in plan and stop rule  — all 191 rows: one break-even number, "cannot break even" above 100%
 PASS  no horizontal overflow (3 widths, 2 themes)  — 1440/1024/390 light+dark all 0
 PASS  no console error  — none
 PASS  no network request  — 0 requests, all file://
 
-15/15 checks passed
+18/18 checks passed
 ```
 
-`verify.mjs` does all of this itself: it runs `main.ts` twice into two directories and byte-compares every file, re-checks the gate's seven rows from the output, rebuilds the dossier with `buildDossier(out, {text_max_bytes: 65536})` and compares it byte for byte, then drives the page in headless Chromium (checks strip, tabs, filters, per-column sort in both directions, overflow at three widths in both themes, console errors, network requests).
+`verify.mjs` does all of this itself: it runs `main.ts` twice into two directories and byte-compares every file, re-checks the gate's seven rows from the output, rebuilds the dossier with `buildDossier(out, {text_max_bytes: 65536})` and compares it byte for byte, then drives the page in headless Chromium (checks strip, tabs, filters, per-column sort in both directions, the rendered text of every tab and every detail sheet, overflow at three widths in both themes, console errors, network requests). The detail sweep runs as one in-page pass that waits for each sheet, so it cannot hang the socket.
 
 ## Before / after sizes
 
 | Artifact | v7 | v8 |
 |---|---|---|
-| `board.json` | 469,269 | 553,789 |
-| `data.js` | 800,532 | 855,735 |
-| `dashboard/` source (5 files) | 70,395 (4 files) | 88,567 (5 files) |
-| dossier **text** | 65,407 | 65,478 (cap 65,536) |
-| `dossier.json` | 832,659 (3 screenshots) | 1,235,123 (4 screenshots) |
-| screenshots | 573,962 (3 jpg) | 875,559 (4 jpg) |
+| `board.json` | 469,269 | 555,291 |
+| `data.js` | 800,532 | 857,492 |
+| `dashboard/` source (5 files) | 70,395 (4 files) | 90,114 (5 files) |
+| dossier **text** | 65,407 | 65,496 (cap 65,536) |
+| `dossier.json` | 832,659 (3 screenshots) | 1,436,954 (4 screenshots) |
+| screenshots | 573,962 (3 jpg) | 1,027,004 (4 jpg) |
 
-The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, and because `checks.js` is new. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js`, `checks.js` and `index.html` whole and leaves `model.js` out (1 file, 23,515 bytes left out) — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is larger than v7 only because it carries a fourth screenshot; it is well under the 1.5 MiB gate.
+The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, and because the page fixes above added the strip/peer/scatter/step-meta code. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js`, `checks.js` and `index.html` whole and leaves `model.js` out — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is larger than v7 only because it carries a fourth screenshot; it is well under the 1.5 MiB gate.
 
 ## Honest weaknesses
 
-- **`model.js` is the file the text leaves out.** The value model is fully stated in `app.js` (the strip and the Method view) and shown in the board and method screenshots, but the model's own source is the one file past the 65,536-byte text cap. Showing it whole would need cutting ~24 KB of page source, which would cost more on the page criteria than it gains.
-- **No row is "farm now".** At the planned position the expected airdrop slice is below gas, fees and the T-bill yield given up, so every plan is `skip` or `watch`; each row states its break-even odds. That is the model's honest answer, not a bug, but a reader looking for a green "farm now" will not find one.
-- **The filtered screenshot filters by watchlist and sorts by net, not by category.** No single category holds 14 watchlist rows (the largest, Risk Curators, holds 12), so a category chip would drop the shot below 14 rows; the category filter is demonstrated on the board and in the toolbar instead.
+- **`model.js` is the file the text leaves out.** The value model is fully stated in `app.js` (the strip and the Method view) and shown in the board and method screenshots, but the model's own source is the one file past the 65,536-byte text cap.
+- **No row is "farm now".** At the planned position the expected airdrop slice is below gas, fees and the T-bill yield given up, so every plan is `skip` or `watch`; each row states its break-even odds, and the KPI tile names the best net (`+ $37`, Nucleus) and the nearest break-even (`24%`, Nucleus) rather than a green count. That is the model's honest answer, not a bug.
+- **The filtered screenshot filters by watchlist and confidence and sorts by net, not by category.** No single category holds 14 watchlist rows (the largest, Risk Curators, holds 12), so a category chip would drop the shot below 14 rows; `w=1&conf=40` gives 33 watchlist rows and the category filter is demonstrated on the board and in the toolbar instead.
 - **The 7-day growth term is rejected in the size curve.** It is applied through the launch-odds logistic, and the Method tab says so plainly rather than claiming a growth term the fit did not support.
 - **The detail sheet is scrollable.** One 1440×1260 shot shows the implied value, the waterfall, the market scatter, the farm plan with per-step cost and time, and the risks; the launch-odds chart sits just below the fold.
