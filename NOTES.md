@@ -28,6 +28,7 @@ The second live review (`REVIEW.md`, not committed) listed 8 defects. Fixed in o
 2. **One sector label.** The detail's comparables header and the scatter legend now read the same `peerInfo(r)` helper: one label from the data (the category when ≥3 tokenised peers share it, else the sector), so "Same sector (Other): N peers" and "filled: Other" can no longer disagree.
 3. **Hand-set constants are declared, not hidden.** None of the four (7% to users, 4% T-bill, ×0.30 per caution flag, confidence 55/40) is in the snapshot, so Method §5 lists each in one "assumptions, not fitted" table with the value it enters and its effect on rank 1 and the skip count, shown at a perturbed value (e.g. 10% to users → 148 skips; 6% T-bill → 187; ×0.50 per flag → unchanged; 60/45 confidence → 191). Rank 1 is Steakhouse Financial throughout.
 4. **No "farm now" is not a dead board.** No test is loosened. The board now defaults to sorting by **net** (highest first), and every detail sheet has a "To break even" card giving the smallest computed change to one lever that would make the plan break even — a higher position, lower gas & fees, or higher odds — shown only where such a change exists (77 of 191 rows have one; the other 114 need more than any single lever, and 22 already clear break-even).
+5. **Sort arrow on the net column.** The "Farm · net" header now sorts on the `net` key, so the default net-descending sort shows its arrow on that column in screenshot 3 (retaken with the final build).
 
 ## What changed from v7 (the model and page underneath)
 

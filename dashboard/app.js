@@ -198,7 +198,7 @@
       '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols, sorted by net; the # column is the implied-value rank</caption><thead><tr>' +
       th(s, 'r', '#', 'n') + th(s, 'n', 'Protocol') + th(s, 'c', 'Category', 'hide-sm') + th(s, 'ch', 'Chains', 'hide-md') +
       th(s, 'tvl', 'TVL · 7d', 'n') + th(s, 'od', '12-mo odds · age', 'n hide-sm') + th(s, 'b', 'Implied value = if launched × odds') +
-      th(s, 'conf', 'Conf.', 'n hide-sm') + th(s, 'pr', 'Farm · net') + '<th scope="col" class="cmp">±</th>' +
+      th(s, 'conf', 'Conf.', 'n hide-sm') + th(s, 'net', 'Farm · net') + '<th scope="col" class="cmp">±</th>' +
       '</tr></thead><tbody>' + (body || '<tr><td colspan="10" class="empty">No protocol matches these filters.</td></tr>') + '</tbody></table></div>' + compareTray(picked);
   }
 
