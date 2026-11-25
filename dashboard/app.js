@@ -331,7 +331,7 @@
     function rk(l) { return l.reduce(function (a, x) { return x.b > a.b ? x : a; }, l[0]).n; }
     function sk(l) { return l.filter(function (x) { return x.pr === 'skip'; }).length; }
     function prio(net, conf, nf) { return (nf > 0 || conf < 40 || net <= 0) ? 'skip' : 'watch'; }
-    function scen(fn, skipFn) { var l = rows.map(function (r) { var c = {}; for (var k in r) c[k] = r[k]; fn(c); c.pr = skipFn ? skipFn(c) : prio(c.net, c.conf, c.fl.length); return c; }); return { rank: rk(l), skip: sk(l) }; }
+    function scen(fn, skipFn) { var l = rows.map(function (r) { var c = {}; for (var k in r) c[k] = r[k]; if (fn) fn(c); c.pr = skipFn ? skipFn(c) : prio(c.net, c.conf, c.fl.length); return c; }); return { rank: rk(l), skip: sk(l) }; }
     var us = scen(function (r) { r.net = Math.round(r.sl * (0.10 / 0.07) * r.oh - r.tc - r.tb); });
     var tb = scen(function (r) { r.net = Math.round(r.sl * r.oh - r.tc - r.tb * (0.06 / 0.04)); });
     var fo = scen(function (r) { var f = Math.pow(0.50 / 0.30, Math.min(2, r.fl.length)); r.oh = r.oh * f; r.b = r.b * f; r.net = Math.round(r.sl * r.oh - r.tc - r.tb); });

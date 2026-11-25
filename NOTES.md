@@ -30,6 +30,7 @@ The second live review (`REVIEW.md`, not committed) listed 8 defects. Fixed in o
 4. **No "farm now" is not a dead board.** No test is loosened. The board now defaults to sorting by **net** (highest first), and every detail sheet has a "To break even" card giving the smallest computed change to one lever that would make the plan break even — a higher position, lower gas & fees, or higher odds — shown only where such a change exists (77 of 191 rows have one; the other 114 need more than any single lever, and 22 already clear break-even).
 5. **Sort arrow on the net column.** The "Farm · net" header now sorts on the `net` key, so the default net-descending sort shows its arrow on that column in screenshot 3 (retaken with the final build).
 6. **`model.js` is whole in the dossier text.** The four files that sort before `model.js` (`app.css`, `app.js`, `checks.js`, `index.html`) already total ~72 KB, over the 65,536-byte text cap, so no amount of trimming the model file could pull it inside the cap while it stayed last. The model is therefore named `00-model.js` so it sorts first and is always shown whole (criteria 1 and 2 are judged on it); repetition and the long header were shortened, and the remaining files follow in path order with `app.js` cut by the contest's own cap. `dossier.json` is still byte-for-byte `buildDossier` output and well under 1.5 MiB.
+7. **Four screenshots are allowed.** `RULES.txt` line 34 says `screenshots/` holds "3 to 4 images", so the 4th (Method) is kept; four are within the rule and within the dossier size gate.
 
 ## What changed from v7 (the model and page underneath)
 
@@ -56,7 +57,7 @@ The same harness on this tree is **18/18** (full output below).
 
 ```
 == determinism ==
-token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 live tokens as comparables, 151 excluded; 5 dashboard files, 4 screenshots -> /tmp/opencode/verify/a
+token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 live tokens as comparables, 151 excluded; 5 dashboard files, 4 screenshots -> /root/makefun/token-radar/out/a
 
 == gate ==
 
@@ -64,18 +65,18 @@ token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 liv
 
 == result ==
 PASS  two runs are byte-identical  — 12 files, all equal
-PASS  dashboard_files  — 5 files, 90222 bytes, html/css/js=true/true/true, network=none
+PASS  dashboard_files  — 5 files, 96202 bytes, html/css/js=true/true/true, network=none
 PASS  board_file  — 191 rows, all slugs known, values positive whole
 PASS  sorted_by_value  — ranks 1..191 once each=true, rises=0, distinct values=191
 PASS  coverage  — 40/40 watchlist slugs on the board
 PASS  farm_steps  — every row 3-12 steps (6-7), each 20-600 chars
-PASS  screenshots  — 1-board.jpg 229448B, 2-detail.jpg 250402B, 3-filtered.jpg 225725B, 4-method.jpg 168904B
-PASS  dossier_matches  — written 1233589 bytes, rebuilt 1233589 bytes, equal=true
+PASS  screenshots  — 1-board.jpg 268900B, 2-detail.jpg 302385B, 3-filtered.jpg 248355B, 4-method.jpg 211515B
+PASS  dossier_matches  — written 1442349 bytes, rebuilt 1442349 bytes, equal=true
 PASS  checks strip 6/6  — ✓ 6 of 6 checks passed in this browser
-PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":6}
-PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":18,"w":40}
+PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":7}
+PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":21,"w":40}
 PASS  every column sorts  — 9 columns, both directions
-PASS  strip value equals row #1  — #1 Steakhouse Financial: 49% and $44.8M, no NaN
+PASS  strip value equals row #1  — #1 Steakhouse Financial: 51% and $47.2M, no NaN
 PASS  rendered text clean (all tabs + every detail)  — 191 detail sheets + 4 tabs: no NaN/undefined/Infinity/$null/big-k
 PASS  break-even equal in plan and stop rule  — all 191 rows: one break-even number, "cannot break even" above 100%
 PASS  no horizontal overflow (3 widths, 2 themes)  — 1440/1024/390 light+dark all 0
@@ -89,20 +90,20 @@ PASS  no network request  — 0 requests, all file://
 
 ## Before / after sizes
 
-| Artifact | v7 | v8 |
+| Artifact | v7 | v8 (25 Nov) |
 |---|---|---|
-| `board.json` | 469,269 | 555,291 |
-| `data.js` | 800,532 | 857,492 |
-| `dashboard/` source (5 files) | 70,395 (4 files) | 90,222 (5 files) |
-| dossier **text** | 65,407 | 65,495 (cap 65,536) |
-| `dossier.json` | 832,659 (3 screenshots) | 1,233,589 (4 screenshots) |
-| screenshots | 573,962 (3 jpg) | 874,479 (4 jpg) |
+| `board.json` | 469,269 | 555,338 |
+| `data.js` | 800,532 | 857,438 |
+| `dashboard/` source (5 files) | 70,395 (4 files) | 96,202 (5 files) |
+| dossier **text** | 65,407 | 65,506 (cap 65,536) |
+| `dossier.json` | 832,659 (3 screenshots) | 1,442,349 (4 screenshots) |
+| screenshots | 573,962 (3 jpg) | 1,031,155 (4 jpg) |
 
-The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, and because the review fixes added the `bePct` / `vsCurve` / `mult` helpers and the best-net KPI line. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js` and `checks.js` whole and leaves out `index.html` and `model.js` (2 files, 24,979 bytes) — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
+The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, because the 25 Nov fixes added the `peerInfo` / `breakEvenChange` / `assumptionsTable` helpers, and because the model file is now named `00-model.js` so it sorts first. The dossier text is capped at 65,536 bytes, so `00-model.js` (the judged model) is shown whole, then `app.css` whole, and `app.js` is cut by the contest's own cap — the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
 
 ## Honest weaknesses
 
-- **The text leaves out `index.html` and `model.js`.** The value model is fully stated in `app.js` (the strip and the Method view) and shown in the board and method screenshots; the tiny HTML shell and the model's own source are the two files past the 65,536-byte text cap. Showing them whole would need cutting ~25 KB of page source, which would cost more on the page criteria than it gains.
+- **The text shows `00-model.js` whole but cuts `app.js`.** The model (criteria 1 and 2) is fully readable; the page source after `app.css` is cut by the 65,536-byte cap. The four files that sort before the old `model.js` name totalled ~72 KB, so the model is ordered first to guarantee it is whole; the page is cut by the contest's own cap, not by a choice to hide it.
 - **No row is "farm now".** At the planned position the expected airdrop slice is below gas, fees and the T-bill yield given up, so every plan is `skip` or `watch`; each row states its break-even odds, and the KPI tile names the best net (`+ $37`, Nucleus) and the nearest break-even (`24%`, Nucleus) rather than a green count, with one sentence saying why. That is the model's honest answer, not a bug.
 - **The filtered screenshot filters by watchlist and sorts by net, not by category.** No single category holds 14 watchlist rows (the largest, Risk Curators, holds 12), so a category chip would drop the shot below 14 rows; the shot is `watchlist only, confidence ≥ 40, sorted by net` (33 rows) and the category filter is demonstrated on the board and in the toolbar instead.
 - **The 7-day growth term is rejected in both models.** Under the one relative-margin rule it is not in the size curve and does not clear the margin in the launch odds (0.537 vs 0.538), so the Method tab says so plainly rather than claiming a growth term the fit did not support.
