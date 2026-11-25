@@ -58,8 +58,8 @@ PASS  board_file  — 191 rows, all slugs known, values positive whole
 PASS  sorted_by_value  — ranks 1..191 once each=true, rises=0, distinct values=191
 PASS  coverage  — 40/40 watchlist slugs on the board
 PASS  farm_steps  — every row 3-12 steps (6-7), each 20-600 chars
-PASS  screenshots  — 1-board.jpg 277080B, 2-detail.jpg 299450B, 3-filtered.jpg 246874B, 4-method.jpg 203600B
-PASS  dossier_matches  — written 1436954 bytes, rebuilt 1436954 bytes, equal=true
+PASS  screenshots  — 1-board.jpg 229448B, 2-detail.jpg 250402B, 3-filtered.jpg 225725B, 4-method.jpg 168904B
+PASS  dossier_matches  — written 1233590 bytes, rebuilt 1233590 bytes, equal=true
 PASS  checks strip 6/6  — ✓ 6 of 6 checks passed in this browser
 PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":6}
 PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":18,"w":40}
@@ -84,15 +84,15 @@ PASS  no network request  — 0 requests, all file://
 | `data.js` | 800,532 | 857,492 |
 | `dashboard/` source (5 files) | 70,395 (4 files) | 90,114 (5 files) |
 | dossier **text** | 65,407 | 65,496 (cap 65,536) |
-| `dossier.json` | 832,659 (3 screenshots) | 1,436,954 (4 screenshots) |
-| screenshots | 573,962 (3 jpg) | 1,027,004 (4 jpg) |
+| `dossier.json` | 832,659 (3 screenshots) | 1,233,590 (4 screenshots) |
+| screenshots | 573,962 (3 jpg) | 874,479 (4 jpg) |
 
-The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, and because the page fixes above added the strip/peer/scatter/step-meta code. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js`, `checks.js` and `index.html` whole and leaves `model.js` out — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is larger than v7 only because it carries a fourth screenshot; it is well under the 1.5 MiB gate.
+The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, and because the review fixes added the `bePct` / `vsCurve` / `mult` helpers and the best-net KPI line. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js` and `checks.js` whole and leaves out `index.html` and `model.js` (2 files, 24,993 bytes) — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
 
 ## Honest weaknesses
 
-- **`model.js` is the file the text leaves out.** The value model is fully stated in `app.js` (the strip and the Method view) and shown in the board and method screenshots, but the model's own source is the one file past the 65,536-byte text cap.
-- **No row is "farm now".** At the planned position the expected airdrop slice is below gas, fees and the T-bill yield given up, so every plan is `skip` or `watch`; each row states its break-even odds, and the KPI tile names the best net (`+ $37`, Nucleus) and the nearest break-even (`24%`, Nucleus) rather than a green count. That is the model's honest answer, not a bug.
-- **The filtered screenshot filters by watchlist and confidence and sorts by net, not by category.** No single category holds 14 watchlist rows (the largest, Risk Curators, holds 12), so a category chip would drop the shot below 14 rows; `w=1&conf=40` gives 33 watchlist rows and the category filter is demonstrated on the board and in the toolbar instead.
+- **The text leaves out `index.html` and `model.js`.** The value model is fully stated in `app.js` (the strip and the Method view) and shown in the board and method screenshots; the tiny HTML shell and the model's own source are the two files past the 65,536-byte text cap. Showing them whole would need cutting ~25 KB of page source, which would cost more on the page criteria than it gains.
+- **No row is "farm now".** At the planned position the expected airdrop slice is below gas, fees and the T-bill yield given up, so every plan is `skip` or `watch`; each row states its break-even odds, and the KPI tile names the best net (`+ $37`, Nucleus) and the nearest break-even (`24%`, Nucleus) rather than a green count, with one sentence saying why. That is the model's honest answer, not a bug.
+- **The filtered screenshot filters by watchlist and sorts by net, not by category.** No single category holds 14 watchlist rows (the largest, Risk Curators, holds 12), so a category chip would drop the shot below 14 rows; the shot is `watchlist only, sorted by net` (40 rows) and the category filter is demonstrated on the board and in the toolbar instead.
 - **The 7-day growth term is rejected in the size curve.** It is applied through the launch-odds logistic, and the Method tab says so plainly rather than claiming a growth term the fit did not support.
 - **The detail sheet is scrollable.** One 1440×1260 shot shows the implied value, the waterfall, the market scatter, the farm plan with per-step cost and time, and the risks; the launch-odds chart sits just below the fold.
