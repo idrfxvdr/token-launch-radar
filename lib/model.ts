@@ -11,17 +11,21 @@ export interface Protocol {
 export interface Snapshot { as_of: string; source: string; floor_usd: number; protocols: Protocol[]; watchlist: string[]; }
 export interface Verdict { status: 'live' | 'candidate' | 'excluded'; reason: string; flags: string[]; }
 export interface Comparable { slug: string; name: string; category: string | null; symbol: string; records: number; tvl: number; mcap: number; multiple: number; resid: number; }
-export interface TermTest { name: string; feats: string[] | null; cat: boolean; mae: number; within_2x: number; }
-export interface Odds { c0: number; c1: number; n: number; bins: { from: number; to: number; n: number; share: number }[]; }
+export interface TermTest { name: string; feats: string[] | null; mae: number; hit: number; cap?: number; ridge?: number; cat?: boolean; applied?: boolean; }
+export interface OddsTest { name: string; feats: string[]; logloss: number; brier: number; }
+export interface Odds { c0: number; c1: number; c2: number; c3: number; n: number; feats: string[]; tests: OddsTest[]; pick: string; logloss: number; base_logloss: number; bins: { from: number; to: number; n: number; share: number }[]; }
+export interface Group { n: number; median: number; q25: number; q75: number; }
 export interface Fitted {
-  as_of: string; a: number; b: number; n: number; loo_mae: number; feats: string[]; useCat: boolean; tests: TermTest[]; odds: Odds;
-  global: { n: number; median: number; q25: number; q75: number }; comps: Comparable[];
+  as_of: string; a: number; b: number; n: number; loo_mae: number; feats: string[]; cap: number; ridge: number; cat: boolean;
+  tests: TermTest[]; odds: Odds; spread: Group; cats: Record<string, Group>; secs: Record<string, Group>; comps: Comparable[];
+  cal: { inside: number; nominal: number; size_mae: number; flat_mae: number; tvl1_mae: number; odds_n: number; odds_live: number; odds_logloss: number; odds_flat_logloss: number };
 }
+export interface CatDetail { category: string; sector: string; n: number; w: number; median: number; sector_n: number; w_sector: number; sector_median: number; premium: number; }
 export interface Valuation {
-  base: number; low: number; high: number; ifl: number; odds: number; carry: number; multiple: number; confidence: number; age: number | null;
-  terms: { curve: number; cat: number; carry: number; odds: number };
+  base: number; low: number; high: number; ifl: number; odds: number; multiple: number; confidence: number; age: number | null;
+  cat: CatDetail;
+  terms: { curve: number; log_tvl: number; carry: number; premium: number; odds_logit: number; age: number; c7: number };
   parts: [string, number][]; drivers: string[];
-  cat_detail: { category_n: number; category_median: number; sector: string; sector_n: number; sector_median: number; w_cat: number; w_sector: number };
   spread: { q25: number; q75: number };
 }
 export type Priority = 'farm now' | 'watch' | 'skip';

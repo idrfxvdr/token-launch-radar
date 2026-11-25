@@ -1,28 +1,29 @@
 /* Token Launch Radar: the model, the single source of every number on the board. main.ts runs it in Node to
-   write board.json; the page re-runs it on the raw snapshot in data.js and checks every value (dashboard/checks.js).
+   write board.json; the page re-runs it on the raw snapshot in data.js and checks every value (checks.js).
    No protocol is named: every rule reads the snapshot's own fields. Plain ES5, a classic script, no network.
-   Two fits, both chosen by leave-one-out on this snapshot and both reported with the error of the simpler model:
-     value if launched  log10 mcap = a + b·log10 TVL      (127 token families)
-     launch odds        logit P(token) = c0 + c1·age + c2·log10 TVL + c3·log10(1+7d growth)   (449 protocols) */
+   Two fits, both chosen by leave-one-out on this snapshot and both reported against the simpler model:
+     value if launched  log10 mcap = a + b·log10 TVL   (+ tested terms: 7d carry, time without a token, category)
+     launch odds        logit P(token) = c0 + c1·age + c2·log10 TVL + c3·log10(1+7d) */
 (function (root) {
   'use strict';
   var K = 4; // shrinkage: a group of n peers is weighted n / (n + K) against its parent
   var SECTORS = {
-    Trading: ['Dexs', 'Derivatives', 'Options', 'Prediction Market', 'Interest Rate Derivatives', 'OTC Marketplace', 'Launchpad', 'NFT Marketplace', 'Perps'],
-    Credit: ['Lending', 'CDP', 'CDP Manager', 'Uncollateralized Lending', 'Collateral Markets', 'Collateral Management', 'Dual-Token Stablecoin', 'Stablecoin Wrapper'],
-    'Yield & vaults': ['Yield', 'Yield Aggregator', 'Risk Curators', 'Onchain Capital Allocator', 'Basis Trading', 'Liquidity Manager', 'Leveraged Farming', 'Farm', 'Indexes', 'Governance Incentives', 'Staking Pool'],
-    'RWA & CeDeFi': ['RWA', 'CeDeFi', 'Payments', 'Crypto Card Issuer', 'Insurance', 'RWA Lending'],
-    Infrastructure: ['Chain', 'Restaking', 'Cross Chain Bridge', 'Bridge', 'Canonical Bridge', 'Decentralized BTC', 'Privacy', 'AI Agents', 'Decentralized AI', 'Token Locker', 'Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'Anchor BTC', 'CEX', 'DOR', 'Oracle']
+    Trading: 'Dexs Derivatives Options Prediction Market Interest Rate Derivatives OTC Marketplace Launchpad NFT Marketplace Perps',
+    Credit: 'Lending CDP CDP Manager Uncollateralized Lending Collateral Markets Collateral Management Dual-Token Stablecoin Stablecoin Wrapper',
+    'Yield & vaults': 'Yield Yield Aggregator Risk Curators Onchain Capital Allocator Basis Trading Liquidity Manager Leveraged Farming Farm Indexes Governance Incentives Staking Pool',
+    'RWA & CeDeFi': 'RWA CeDeFi Payments Crypto Card Issuer Insurance RWA Lending',
+    Infrastructure: 'Chain Restaking Cross Chain Bridge Bridge Canonical Bridge Decentralized BTC Privacy AI Agents Decentralized AI Token Locker Liquid Staking Liquid Restaking Restaked BTC Anchor BTC CEX DOR Oracle'
   };
+  Object.keys(SECTORS).forEach(function (s) { SECTORS[s] = SECTORS[s].split(' '); });
   function sectorOf(c) { for (var s in SECTORS) if (c !== null && SECTORS[s].indexOf(c) >= 0) return s; return 'Other'; }
 
   /* ---------- 1. classify: live token, pre-token candidate, or a product of a traded token ---------- */
   var DERIVATIVE_CATS = ['Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'Bridge', 'Canonical Bridge', 'CEX', 'Anchor BTC'];
-  // Exclusion only, never value: the exchange names of the house watchlist rule (an exchange's staked or wrapped product).
   var EXCHANGES = ['binance', 'coinbase', 'bybit', 'kraken', 'bitget', 'okx', 'bitfinex', 'gemini', 'htx', 'kucoin', 'gate', 'mexc', 'crypto.com'];
   var DERIVATIVE_WORDS = /\b(wrapped|staked|staking|restaked|bridged|liquid staking)\b/i;
   var VERSION = /\s(v\d+(\.\d+)?|\d+\.\d+)$/i;
-  var GENERIC = ['the', 'liquid', 'finance', 'protocol', 'money', 'capital', 'labs', 'network', 'dao', 'swap', 'yield', 'vault', 'vaults', 'pool', 'pools', 'lend', 'earn', 'staking', 'bridge', 'exchange', 'markets', 'market', 'stable', 'usd', 'btc', 'eth', 'sol', 'open', 'base', 'one', 'pro', 'prime', 'core', 'x'];
+  var GENERIC = 'the liquid finance protocol money capital labs network dao swap yield vault vaults pool pools lend earn staking bridge exchange markets market stable usd btc eth sol open base one pro prime core x';
+  GENERIC = GENERIC.split(' ');
   function familyKey(name) {
     var first = name.toLowerCase().replace(VERSION, '').split(/[\s\-_.:()/]+/).filter(function (w) { return w; })[0] || '';
     var w = first.replace(/[^a-z0-9]/g, '');
@@ -78,9 +79,9 @@
 
   /* ---------- 3. small maths ---------- */
   function r3(x) { return Math.round(x * 1000) / 1000; }
-  function quantile(s, q) { if (!s.length) return 0; var at = (s.length - 1) * q, lo = Math.floor(at), hi = Math.ceil(at); return s[lo] + (s[hi] - s[lo]) * (at - lo); }
-  function med(v) { return quantile(v.slice().sort(function (a, b) { return a - b; }), 0.5); }
-  function group(v) { var s = v.slice().sort(function (a, b) { return a - b; }); return { n: s.length, median: quantile(s, 0.5), q25: quantile(s, 0.25), q75: quantile(s, 0.75) }; }
+  function quantile(s0, q) { var s = s0.slice().sort(function (a, b) { return a - b; }); if (!s.length) return 0; var at = (s.length - 1) * q, lo = Math.floor(at), hi = Math.ceil(at); return s[lo] + (s[hi] - s[lo]) * (at - lo); }
+  function med(v) { return quantile(v, 0.5); }
+  function group(v) { return { n: v.length, median: quantile(v, 0.5), q25: quantile(v, 0.25), q75: quantile(v, 0.75) }; }
   function lsq(rows, feats) {
     var k = feats.length + 1, A = [], b = [], i, j, r;
     for (i = 0; i < k; i++) { A.push([]); b.push(0); for (j = 0; j < k; j++) A[i].push(0); }
@@ -98,41 +99,61 @@
 
   /* ---------- 4. value if launched: the terms, each left out and refitted ----------
      rows are the snapshot's token families: y = log10 mcap, x = log10 TVL, c7 = log10(1 + 7d growth), age in years.
-     A variant is used only when its held-out error beats the no-growth curve's. */
+     A term is applied only when its held-out error beats the model without it; every variant is reported. */
   function rowsOf(fams) {
-    return fams.map(function (p) { return { y: Math.log10(p.mcap), x: Math.log10(p.tvl), c7: Math.log10(1 + Math.max(-90, p.c7 === null ? 0 : p.c7) / 100), age: p.age === null ? 2 : p.age, cat: p.category }; });
+    return fams.map(function (p) { return { y: Math.log10(p.mcap), x: Math.log10(p.tvl), c7: Math.log10(1 + Math.max(-90, p.c7 === null ? 0 : p.c7) / 100), age: p.age === null ? 2 : p.age, cat: p.category || 'Uncategorised' }; });
   }
-  /** One variant's prediction for row i, fitted on rest. cap: carry the TVL forward, clamped to [1/cap, cap]. */
-  function predict(rows, rest, i, feats, cap) {
-    var w = lsq(rest, feats);
-    var r = rows[i], x = r.x;
-    if (cap) x = Math.log10(Math.pow(10, r.x) * Math.max(1 / cap, Math.min(cap, Math.pow(10, r.c7))));
-    return dot(w, design(feats, { x: x, c7: r.c7, age: r.age }));
+  function V(name, feats, extra) {
+    var v = { name: name, feats: feats, cap: 0, ridge: 0, cat: false, applied: false };
+    if (extra) for (var k in extra) v[k] = extra[k];
+    return v;
   }
-  /** Leave-one-out mean absolute error in dex, and the share of held-out families inside the 25-75% band. */
-  function loo(rows, feats, cap) {
-    var e = 0, inside = 0, n = rows.length;
-    for (var i = 0; i < n; i++) {
-      var rest = rows.filter(function (_, j) { return j !== i; });
-      var g = predict(rows, rest, i, feats, cap), err = Math.abs(rows[i].y - g);
-      e += err;
-      var res = rest.map(function (r) { return r.y - predict(rest, rest, rest.indexOf(r), feats, cap); });
-      var lo = quantile(res, 0.25), hi = quantile(res, 0.75);
-      if (rows[i].y - g >= lo && rows[i].y - g <= hi) inside++;
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  /** One variant's prediction for row i, fitted on rest. cap carries TVL forward, clamped to [1/cap, cap]. */
+  function predictV(rows, rest, i, v) {
+    var w = lsq(rest, v.feats), r = rows[i], x = r.x;
+    if (v.cap) x = Math.log10(Math.pow(10, r.x) * clamp(Math.pow(10, r.c7), 1 / v.cap, v.cap));
+    var g = dot(w, design(v.feats, { x: x, c7: r.c7, age: r.age }));
+    if (v.ridge) g += w[2] * (v.ridge - 1) * r.c7;
+    if (v.cat) g += premium(rest, w, v.feats, r.cat);
+    return g;
+  }
+  /** Category median residual, shrunk to zero by n/(n+K): the category term, tested and usually rejected. */
+  function premium(rows, w, feats, cat) {
+    var own = [];
+    rows.forEach(function (r) { if (r.cat === cat) own.push(r.y - dot(w, design(feats, r))); });
+    return own.length ? own.length / (own.length + K) * med(own) : 0;
+  }
+  /** Leave-one-out errors of a variant: one refit per family, its held-out error in dex (log10). */
+  function looErrors(rows, v) {
+    var errs = [], n = rows.length;
+    for (var i = 0; i < n; i++) errs.push(rows[i].y - predictV(rows, rows.filter(function (_, j) { return j !== i; }), i, v));
+    return errs;
+  }
+  /** Mean absolute held-out error, and the share of families priced within 2x. */
+  function looV(rows, v) {
+    var errs = looErrors(rows, v), e = 0, hit = 0;
+    errs.forEach(function (x) { e += Math.abs(x); if (Math.abs(x) <= Math.log10(2)) hit++; });
+    return { mae: r3(e / errs.length), hit: r3(hit / errs.length) };
+  }
+  /** Nested coverage: the band for each held-out family is the quartiles of the other families' own errors. */
+  function looInside(rows, v) {
+    var errs = looErrors(rows, v), inside = 0;
+    for (var i = 0; i < errs.length; i++) {
+      var others = errs.filter(function (_, j) { return j !== i; });
+      if (errs[i] >= quantile(others, 0.25) && errs[i] <= quantile(others, 0.75)) inside++;
     }
-    return { mae: r3(e / n), w2: r3(n ? inside / n : 0) };
+    return r3(inside / errs.length);
   }
   /** The flat baseline: every family priced at the median market cap / TVL of the rest. */
   function looFlat(rows) {
-    var e = 0, inside = 0, n = rows.length;
+    var e = 0, hit = 0, n = rows.length;
     for (var i = 0; i < n; i++) {
       var rest = rows.filter(function (_, j) { return j !== i; });
-      var m = med(rest.map(function (r) { return r.y - r.x; })), g = rows[i].x + m;
-      e += Math.abs(rows[i].y - g);
-      var res = rest.map(function (r) { return r.y - r.x - m; });
-      if (rows[i].y - g >= quantile(res, 0.25) && rows[i].y - g <= quantile(res, 0.75)) inside++;
+      var m = med(rest.map(function (r) { return r.y - r.x; })), err = rows[i].y - (rows[i].x + m);
+      e += Math.abs(err); if (Math.abs(err) <= Math.log10(2)) hit++;
     }
-    return { mae: r3(e / n), w2: r3(inside / n) };
+    return { mae: r3(e / n), hit: r3(hit / n) };
   }
   /** Nested: the ridge strength is chosen by 5-fold CV inside each outer training set. */
   function ridgeStrength(rows) {
@@ -150,22 +171,16 @@
     });
     return best;
   }
-  function valueTests(rows) {
-    var flat = looFlat(rows), size = loo(rows, ['x']), g = loo(rows, ['x', 'c7']), s = ridgeStrength(rows), re = 0, n = rows.length;
-    for (var i = 0; i < n; i++) {
-      var rest = rows.filter(function (_, j) { return j !== i; }), w = lsq(rest, ['x', 'c7']);
-      re += Math.abs(rows[i].y - (w[0] + w[1] * rows[i].x + w[2] * s * rows[i].c7));
-    }
-    var out = [
-      { name: 'flat multiple (median cap/TVL)', mae: flat.mae, w2: flat.w2, feats: null },
-      { name: 'TVL only', mae: size.mae, w2: size.w2, feats: ['x'] },
-      { name: '+ 7d growth, fitted', mae: g.mae, w2: g.w2, feats: ['x', 'c7'] },
-      { name: '+ 7d growth, ridge ' + s + ' (nested CV)', mae: r3(re / n), w2: g.w2, feats: ['x', 'c7'], ridge: s }
-    ];
-    [1.2, 1.5].forEach(function (c) { var r2 = loo(rows, ['x'], c); out.push({ name: '+ 7d carry capped ×' + c, mae: r2.mae, w2: r2.w2, feats: ['x'], cap: c }); });
-    var a = loo(rows, ['x', 'age']);
-    out.push({ name: '+ time without a token', mae: a.mae, w2: a.w2, feats: ['x', 'age'] });
-    return out;
+  /** Every variant the value fit may apply, in the order they are tested. */
+  function variants(rows) {
+    var s = ridgeStrength(rows);
+    return [V('TVL only', ['x']),
+      V('+ 7d growth, fitted', ['x', 'c7']),
+      V('+ 7d growth, ridge ' + s + ' (nested CV)', ['x', 'c7'], { ridge: s }),
+      V('+ 7d carry capped ×1.2', ['x'], { cap: 1.2 }),
+      V('+ 7d carry capped ×1.5', ['x'], { cap: 1.5 }),
+      V('+ time without a token', ['x', 'age']),
+      V('+ category premium', ['x'], { cat: true })];
   }
 
   /* ---------- 5. launch odds: a logistic on age, TVL and 7d growth ----------
@@ -174,21 +189,23 @@
   var ODDS_FEATS = ['a', 'lx', 'g'];
   function logitFit(pts, feats) {
     var k = feats.length + 1, c = new Array(k).fill(0), it, i, j, r;
-    for (it = 0; it < 40; it++) {
-      var H = [], g = [];
+    for (it = 0; it < 25; it++) {
+      var H = [], g = [], move = 0;
       for (i = 0; i < k; i++) { H.push([]); g.push(0); for (j = 0; j < k; j++) H[i].push(0); }
       pts.forEach(function (p) {
         var v = design(feats, p), z = dot(c, v), pr = 1 / (1 + Math.exp(-z)), w = Math.max(pr * (1 - pr), 1e-9);
         for (i = 0; i < k; i++) { g[i] += v[i] * (p.y - pr); for (j = 0; j < k; j++) H[i][j] += w * v[i] * v[j]; }
       });
       var A = H.map(function (row, i2) { return row.concat([g[i2]]); });
+      for (i = 0; i < k; i++) A[i][i] += 1e-2; // a little ridge: keeps a rare split from running the logit away
       for (i = 0; i < k; i++) {
         var p2 = i; for (r = i + 1; r < k; r++) if (Math.abs(A[r][i]) > Math.abs(A[p2][i])) p2 = r;
         var t = A[i]; A[i] = A[p2]; A[p2] = t;
         for (r = i + 1; r < k; r++) { var q = A[r][i] / A[i][i]; for (j = i; j <= k; j++) A[r][j] -= q * A[i][j]; }
       }
       var d = new Array(k); for (i = k - 1; i >= 0; i--) { var s2 = A[i][k]; for (j = i + 1; j < k; j++) s2 -= A[i][j] * d[j]; d[i] = s2 / A[i][i]; }
-      for (i = 0; i < k; i++) c[i] += d[i];
+      for (i = 0; i < k; i++) { c[i] += d[i]; move = Math.max(move, Math.abs(d[i])); }
+      if (move < 1e-7) break;
     }
     return c;
   }
@@ -206,8 +223,8 @@
   function oddsTest(pts, feats) {
     var ll = 0, br = 0, n = pts.length;
     pts.forEach(function (_, i) {
-      var rest = pts.filter(function (__, j) { return j !== i; }), c = logitFit(rest, feats);
-      var pr = Math.min(0.999, Math.max(0.001, oddsAt(c, pts[i])));
+      var c = logitFit(pts.filter(function (__, j) { return j !== i; }), feats);
+      var pr = clamp(oddsAt(c, pts[i]), 0.001, 0.999);
       ll += pts[i].y ? Math.log(pr) : Math.log(1 - pr); br += Math.pow(pr - pts[i].y, 2);
     });
     return { logloss: r3(-ll / Math.max(1, n)), brier: r3(br / Math.max(1, n)) };
@@ -217,60 +234,79 @@
       .map(function (t) { var r = oddsTest(pts, t[1]); return { name: t[0], feats: t[1], logloss: r.logloss, brier: r.brier }; });
   }
 
+  /** The smallest held-out gain (dex) that justifies adding a term: below it the term is noise. */
+  var GAIN = 0.005;
   function fit(snap, verdicts) {
-    var fams = tokenFamilies(snap), rows = rowsOf(fams), tests = valueTests(rows);
-    // The value if launched: the first variant that beats TVL only, else TVL only. Flat and TVL only are baselines.
-    var base = tests[1].mae, pick = tests[1], i;
-    for (i = 2; i < tests.length; i++) if (tests[i].mae < pick.mae - 1e-9 && tests[i].feats) pick = tests[i];
-    var w = lsq(rows, pick.feats), resid = rows.map(function (r) { return r.y - dot(w, design(pick.feats, r)); });
-    var spread = group(resid);
+    var fams = tokenFamilies(snap), rows = rowsOf(fams), vs = variants(rows), i;
+    var flat = looFlat(rows);
+    vs.forEach(function (v) { var r = looV(rows, v); v.mae = r.mae; v.hit = r.hit; });
+    // Forward selection: a term is applied only when it lowers the held-out error by more than GAIN.
+    var pick = vs[0];
+    for (i = 1; i < vs.length; i++) if (vs[i].mae < pick.mae - GAIN) pick = vs[i];
+    vs.forEach(function (v) { v.applied = v === pick; });
+    // The range is the leave-one-out error quartiles: what a family the fit has not seen actually misses by.
+    var errs = looErrors(rows, pick), spread = group(errs), cats = {};
+    rows.forEach(function (r, j) { (cats[r.cat] = cats[r.cat] || []).push(errs[j]); });
+    for (var c in cats) cats[c] = group(cats[c]);
+    var w = lsq(rows, pick.feats);
     var comps = fams.map(function (p, j) {
       return { slug: p.slug, name: p.name, category: p.category, symbol: p.symbol, records: p.records, tvl: p.tvl, mcap: p.mcap,
-        multiple: r3(p.mcap / p.tvl), resid: r3(resid[j]), x: resid[j] };
+        multiple: r3(p.mcap / p.tvl), resid: r3(errs[j]), x: errs[j] };
     });
     var pts = oddsPoints(snap, verdicts), otests = oddsTests(pts), opick = otests[1];
     for (i = 2; i < otests.length; i++) if (otests[i].logloss < opick.logloss - 1e-9) opick = otests[i];
     var oc = logitFit(pts, opick.feats), bins = [0, 1, 2, 3, 4, 5].map(function (b) {
-      var s = pts.filter(function (p) { return p.a >= b && p.a < b + 1; });
-      return { from: b, to: b + 1, n: s.length, share: r3(s.reduce(function (t, p) { return t + p.y; }, 0) / Math.max(1, s.length)) };
+      var q = pts.filter(function (p) { return p.a >= b && p.a < b + 1; });
+      return { from: b, to: b + 1, n: q.length, share: r3(q.reduce(function (t, p) { return t + p.y; }, 0) / Math.max(1, q.length)) };
     });
-    // Calibration: held-out families inside the low-high band, against the two simpler baselines.
-    var cal = { inside: tests[1].w2, nominal: 0.5, size_mae: base, flat_mae: tests[0].mae, tvl1_mae: r3(rows.reduce(function (t, r) { return t + Math.abs(r.y - r.x); }, 0) / rows.length), odds_n: pts.length, odds_live: pts.filter(function (p) { return p.y; }).length };
-    return { as_of: snap.as_of, a: r3(w[0]), b: r3(w[1]), w: w, feats: pick.feats, ridge: pick.ridge || 0, cap: pick.cap || 0, n: fams.length,
-      tests: tests, loo_mae: pick.mae, spread: spread, comps: comps, cal: cal,
-      odds: { c0: r3(oc[0]), c1: r3(oc[1]), c2: r3(oc[2]), c3: r3(oc[3]), k: oc, feats: opick.feats, n: pts.length, tests: otests, pick: opick.name, bins: bins, logloss: opick.logloss, base_logloss: otests[1].logloss } };
+    var cal = { inside: looInside(rows, pick), nominal: 0.5, size_mae: vs[0].mae, flat_mae: flat.mae,
+      tvl1_mae: r3(rows.reduce(function (t, r) { return t + Math.abs(r.y - r.x); }, 0) / rows.length),
+      odds_n: pts.length, odds_live: pts.filter(function (p) { return p.y; }).length,
+      odds_logloss: opick.logloss, odds_flat_logloss: otests[0].logloss };
+    return { as_of: snap.as_of, a: r3(w[0]), b: r3(w[1]), w: w, feats: pick.feats, ridge: pick.ridge || 0, cap: pick.cap || 0,
+      cat: pick.cat, n: fams.length, tests: vs, loo_mae: pick.mae, spread: spread, cats: cats, secs: {}, comps: comps, cal: cal,
+      odds: { c0: r3(oc[0]), c1: r3(oc[1]), c2: r3(oc[2]), c3: r3(oc[3]), k: oc, feats: opick.feats, n: pts.length, tests: otests,
+        pick: opick.name, bins: bins, logloss: opick.logloss, base_logloss: otests[1].logloss } };
   }
 
   /* ---------- 6. the implied value of one pre-token protocol ----------
-     if launched:  10^(a + b·log10 TVL)
+     if launched:  10^(a + b·log10 TVL carried) x category premium
      launch odds: 1 - F(a) over the next year, from the fitted logistic on age, TVL and 7d growth
      implied:      if launched x odds x 0.3 per caution flag        <- ranked */
   var FLAG_ODDS = 0.3;
   function launchOdds(m, age, tvl, c7) {
     var o = m.odds, g = Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100);
     var at = function (a) { return oddsAt(o.k, { a: Math.min(6, a), lx: Math.log10(Math.max(1, tvl)), g: g }); };
-    var f = at(age); return Math.max(0, Math.min(1, (at(age + 1) - f) / Math.max(1e-6, 1 - f)));
+    var f = at(age); return clamp((at(age + 1) - f) / Math.max(1e-6, 1 - f), 0, 1);
+  }
+  /** The category premium of one protocol, from the fitted groups (n/(n+K) against zero). */
+  function catOf(m, cat) {
+    var own = m.cats[cat], wc = own ? own.n / (own.n + K) : 0;
+    return { category: cat, sector: sectorOf(cat), n: own ? own.n : 0, w: r3(wc), median: own ? own.median : 0,
+      sector_n: 0, w_sector: 0, sector_median: 0, premium: r3(wc * (own ? own.median : 0)) };
   }
   function value(m, p, flagCount) {
-    var age = yearsOld(p.listed_at, m.as_of), ageUsed = age === null ? 2 : age;
-    var c7 = p.change_7d, carry = 1;
-    if (m.cap) { var raw = Math.pow(10, Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100)); carry = Math.max(1 / m.cap, Math.min(m.cap, raw)); }
-    var tvl = p.tvl_usd * carry, curve = m.a + m.b * Math.log10(tvl), ifl = Math.pow(10, curve);
+    var age = yearsOld(p.listed_at, m.as_of), ageUsed = age === null ? 2 : age, c7 = p.change_7d, carry = 1;
+    if (m.cap) carry = clamp(Math.pow(10, Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100)), 1 / m.cap, m.cap);
+    var cd = catOf(m, p.category || 'Uncategorised'), tvl = p.tvl_usd * carry;
+    var curve = m.a + m.b * Math.log10(tvl) + (m.cat ? cd.premium : 0), ifl = Math.pow(10, curve);
     var odds0 = launchOdds(m, ageUsed, p.tvl_usd, c7), fm = Math.pow(FLAG_ODDS, Math.min(2, flagCount));
-    var odds = Math.max(0, Math.min(0.995, odds0 * fm));
-    var base = Math.max(1, Math.round(ifl * odds));
+    var odds = clamp(odds0 * fm, 0, 0.995), base = Math.max(1, Math.round(ifl * odds));
     var lo = Math.max(1, Math.round(Math.pow(10, curve + m.spread.q25) * odds));
     var hi = Math.max(base, Math.round(Math.pow(10, curve + m.spread.q75) * odds));
-    var parts = [['start', 50], ['TVL depth', Math.round(Math.max(-10, Math.min(20, 6 * (Math.log10(p.tvl_usd) - 7.7))))],
+    var parts = [['start', 50], ['TVL depth', Math.round(clamp(6 * (Math.log10(p.tvl_usd) - 7.7), -10, 20))],
       ['peer spread', Math.round(-25 * (m.spread.q75 - m.spread.q25 - 0.9))]];
     if (c7 === null) parts.push(['no 7d change', -8]); else if (Math.abs(c7) > 25) parts.push(['volatile TVL', -8]);
     if (age === null) parts.push(['no listing date: age taken as 2y', -8]); else if (age < 0.33) parts.push(['under 4 months old', -6]);
     if (flagCount > 0) parts.push([flagCount + ' caution flag' + (flagCount === 1 ? '' : 's'), -18 * flagCount]);
-    var confidence = Math.max(5, Math.min(95, parts.reduce(function (t, x) { return t + x[1]; }, 0)));
+    var confidence = Math.round(clamp(parts.reduce(function (t, x) { return t + x[1]; }, 0), 5, 95));
     return { base: base, low: lo, high: hi, ifl: Math.round(ifl), odds: r3(odds), odds0: r3(odds0), odds_flag: r3(fm), multiple: r3(base / p.tvl_usd),
-      confidence: confidence, parts: parts, age: age === null ? null : Math.round(age * 365),
-      terms: { curve: r3(curve), log_tvl: r3(Math.log10(tvl)), carry: r3(carry), odds_logit: r3(Math.log(odds0 / Math.max(1e-9, 1 - odds0))), age: ageUsed, c7: r3(Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100)) },
-      drivers: ['launch odds ' + Math.round(odds * 100) + '% in 12 mo', c7 === null ? 'no 7d carry' : '7d TVL ' + (c7 >= 0 ? '+' : '') + c7.toFixed(1) + '%', (m.feats.length > 1 ? m.feats.slice(1).join(' + ') : 'TVL only') + ' in the value fit'],
+      confidence: confidence, parts: parts, age: age === null ? null : Math.round(age * 365), cat: cd,
+      terms: { curve: r3(curve), log_tvl: r3(Math.log10(tvl)), carry: r3(carry), premium: r3(m.cat ? cd.premium : 0),
+        odds_logit: r3(Math.log(odds0 / Math.max(1e-9, 1 - odds0))), age: ageUsed, c7: r3(Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100)) },
+      drivers: ['launch odds ' + Math.round(odds * 100) + '% in 12 mo', c7 === null ? 'no 7d carry' : '7d TVL ' + (c7 >= 0 ? '+' : '') + c7.toFixed(1) + '%',
+        m.cap ? '7d carry capped ×' + m.cap : m.ridge ? '7d growth shrunk ×' + m.ridge : m.feats.length > 1 ? m.feats.slice(1).join(' + ') : 'TVL only',
+        m.cat ? 'category ' + (cd.premium >= 0 ? '+' : '') + Math.round((Math.pow(10, cd.premium) - 1) * 100) + '%' : 'no category term'],
       spread: { q25: r3(m.spread.q25), q75: r3(m.spread.q75) } };
   }
 
@@ -281,7 +317,8 @@
     var oddsH = launchOdds(m, ageUsed, p.tvl_usd, p.change_7d) * Math.pow(FLAG_ODDS, Math.min(2, flagCount));
     var slice = USER_SHARE * v.ifl * position / p.tvl_usd, tbill = TBILL * position * h;
     var expected = slice * oddsH, net = expected - costs - tbill;
-    return { slice: Math.round(slice), odds: r3(Math.min(0.995, oddsH)), expected: Math.round(expected), tbill: Math.round(tbill), costs: costs, net: Math.round(net), breakeven: r3(slice > 0 ? (costs + tbill) / slice : 1) };
+    return { slice: Math.round(slice), odds: r3(Math.min(0.995, oddsH)), expected: Math.round(expected), tbill: Math.round(tbill),
+      costs: costs, net: Math.round(net), breakeven: r3(slice > 0 ? (costs + tbill) / slice : 1) };
   }
   function priority(flagCount, confidence, c7, net, cost) {
     if (flagCount > 0 || confidence < 40 || net <= 0) return 'skip';
@@ -291,6 +328,7 @@
 
   function short(n) { var a = Math.abs(n); return a >= 1e12 ? (n / 1e12).toFixed(2) + 'T' : a >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : a >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : a >= 1e3 ? (n / 1e3).toFixed(0) + 'K' : String(Math.round(n)); }
 
-  root.RadarModel = { K: K, USER_SHARE: USER_SHARE, TBILL: TBILL, FLAG_ODDS: FLAG_ODDS, SECTORS: SECTORS, sectorOf: sectorOf, classify: classify,
-    fit: fit, value: value, farm: farm, priority: priority, short: short, launchOdds: launchOdds, yearsOld: yearsOld, tokenFamilies: tokenFamilies };
+  root.RadarModel = { K: K, USER_SHARE: USER_SHARE, TBILL: TBILL, FLAG_ODDS: FLAG_ODDS, SECTORS: SECTORS, sectorOf: sectorOf,
+    classify: classify, fit: fit, value: value, farm: farm, priority: priority, short: short, launchOdds: launchOdds,
+    yearsOld: yearsOld, tokenFamilies: tokenFamilies, catOf: catOf };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

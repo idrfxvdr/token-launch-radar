@@ -30,6 +30,8 @@ export interface Plan {
   breakeven: number;         // the launch odds at which the plan breaks even
   net: number;               // drop - total_cost: what farming nets at the model's base value
   hours: number;             // hands-on hours for the whole plan
+  main_risk: string;         // the one risk that decides this plan
+  stop_rule: string;         // the rule that ends it
   gas: string;
   steps: Step[];
   risks: string[];
@@ -43,46 +45,54 @@ function pickChain(chains: string[]): string {
 const usd = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${Math.round(n)}`;
 const big = (n: number) => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : `$${(n / 1e6).toFixed(1)}M`;
 
-interface Ctx { p: Protocol; v: Valuation; chain: string; cheap: boolean; gas: number; ticket: number; full: number; weeks: number; per1k: number; c7: number; age: number | null; }
+interface Ctx { p: Protocol; v: Valuation; chain: string; cheap: boolean; gas: number; ticket: number; full: number; weeks: number; per1k: number; c7: number; age: number | null; cat: string; }
 
 /** n transactions on the plan's chain, as dollars. */
 const tx = (x: Ctx, n: number) => `~$${Math.max(1, Math.round(n * x.gas))} gas (${n} tx)`;
 
 /** The sector's core actions: what to deposit, borrow, trade or provide, each with its cost and time. */
-function actions(sector: string, cat: string, x: Ctx): Step[] {
-  const { p, chain, ticket, full, weeks } = x;
+function actions(sector: string, x: Ctx): Step[] {
+  const { p, chain, ticket, full, weeks, cat } = x;
   const on = `on ${chain}`;
   if (cat === 'Prediction Market') return [
-    { text: `Fund ${p.name} ${on} with ${usd(ticket)} in USDC and spread it over 8-12 liquid markets at $25-$100 each; prediction venues' points weight distinct markets and settled volume, not one large bet.`, cost: `${usd(ticket)} at risk on outcomes + ${tx(x, 10)}`, time: '45 min, then 15 min a week' },
+    { text: `Fund ${p.name} ${on} with ${usd(ticket)} in USDC and spread it over 8-12 liquid markets at $25-$100 each; a prediction venue's points weight distinct markets and settled volume, not one large bet.`, cost: `${usd(ticket)} at risk on outcomes + ${tx(x, 10)}`, time: '45 min, then 15 min a week' },
     { text: `Provide liquidity with resting limit orders inside the spread on two or three high-volume markets, up to ${usd(full / 2)}; maker activity is usually rewarded above taker volume and pays no fee.`, cost: `${usd(full / 2)} working capital, $0 maker fees`, time: '20 min a week to re-quote' },
   ];
   if (sector === 'Trading' && /Deriv|Perp|Option|Interest/.test(cat + p.name)) return [
-    { text: `Deposit ${usd(ticket)}-${usd(full)} USDC margin into ${p.name} ${on} and trade BTC and ETH at 2-3x leverage at most; perp points track volume and open interest, so turnover counts more than size.`, cost: `${usd(full)} margin + ${tx(x, 2)}`, time: '20 min' },
+    { text: `Deposit ${usd(ticket)}-${usd(full)} USDC margin into ${p.name} ${on} and trade BTC and ETH at 2-3x leverage at most; a derivatives venue's points track volume and open interest, so turnover counts more than size.`, cost: `${usd(full)} margin + ${tx(x, 2)}`, time: '20 min' },
     { text: `Use post-only (maker) orders: at a typical 0.02% maker / 0.05% taker fee, $100k of monthly volume costs about $20-$50, which is your price per point; aim for $25k-$100k a month.`, cost: `$20-$50 a month in fees`, time: '15 min a week' },
     { text: `Hold a hedged position (long on ${p.name}, the same size short on another venue) to earn open-interest points with no price exposure; keep the margin ratio above 3x maintenance.`, cost: `funding paid on one leg, often ±10% APR on ${usd(full / 2)}`, time: '10 min a week to check margin' },
   ];
-  if (sector === 'Trading') return [
+  if (sector === 'Trading' && cat === 'Dexs') return [
     { text: `Provide liquidity on ${p.name} ${on}: put ${usd(ticket)}-${usd(full)} into its deepest stable or ETH pair, as a ±5-10% range if the pool is concentrated, and rebalance when price leaves it.`, cost: `${usd(full)} in the pool, impermanent loss on the volatile side + ${tx(x, 3)}`, time: '25 min, then 10 min per rebalance' },
     { text: `Swap through ${p.name} directly (not an aggregator) two or three times a week, $200-$1,000 a trade in the same pair, so the wallet shows organic volume.`, cost: `0.05-0.3% per swap + ${tx(x, 3)} a week`, time: '10 min a week' },
   ];
-  if (cat === 'Lending' || cat === 'Uncollateralized Lending' || cat === 'Collateral Markets' || cat === 'Collateral Management') return [
-    { text: `Supply ${usd(ticket)}-${usd(full)} of USDC or ETH to ${p.name} ${on}; lenders' points usually accrue on supplied balance per day, so the earlier and steadier, the better.`, cost: `${usd(full)} supplied (earns the supply rate) + ${tx(x, 2)}`, time: '15 min' },
-    { text: `Borrow a stablecoin against it at no more than 35-40% loan-to-value and keep the loan open for the ${weeks} weeks: most lending programmes pay more for borrow than for supply.`, cost: `the borrow rate on ${usd(full * 0.35)}, about ${usd(full * 0.35 * 0.07 * weeks / 52)} over ${weeks} weeks at 7% APR`, time: '10 min, then a weekly health check' },
+  if (sector === 'Trading') return [
+    { text: `Use ${p.name}'s ${cat.toLowerCase()} venue ${on} with ${usd(ticket)}-${usd(full)}: ${cat === 'Launchpad' ? 'buy one or two early sales and hold the allocation' : cat === 'NFT Marketplace' ? 'list and buy two or three pieces in one collection' : 'trade its main market a few times a week'} so the wallet shows real activity.`, cost: `${usd(full)} put to work + ${tx(x, 4)}`, time: '20 min, then 10 min a week' },
+    { text: `Keep the position on ${chain} for the campaign rather than cycling in and out: ${cat} programmes usually sample a balance and a trade count at a snapshot.`, cost: tx(x, 2), time: '5 min a week' },
   ];
-  if (sector === 'Credit') return [
+  if (cat === 'Lending' || cat === 'Uncollateralized Lending') return [
+    { text: `Supply ${usd(ticket)}-${usd(full)} of USDC or ETH to ${p.name} ${on}; a lending market's points usually accrue on supplied balance per day, so the earlier and steadier, the better.`, cost: `${usd(full)} supplied (earns the supply rate) + ${tx(x, 2)}`, time: '15 min' },
+    { text: `Borrow a stablecoin against it at no more than 35-40% loan-to-value and keep the loan open for the ${weeks} weeks: lending programmes pay more for borrow than for supply.`, cost: `the borrow rate on ${usd(full * 0.35)}, about ${usd(full * 0.35 * 0.07 * weeks / 52)} over ${weeks} weeks at 7% APR`, time: '10 min, then a weekly health check' },
+  ];
+  if (cat === 'Collateral Markets' || cat === 'Collateral Management') return [
+    { text: `Deposit ${usd(ticket)}-${usd(full)} of collateral into ${p.name} ${on} and borrow against it at 40% loan-to-value; a collateral market rewards the collateral you post and the debt you take.`, cost: `${usd(full)} collateral + ${tx(x, 3)}`, time: '20 min' },
+    { text: `Keep the loan open across the ${weeks} weeks and top the collateral up when the ratio nears 45%: the position is the points, and a liquidation ends them.`, cost: `interest on ${usd(full * 0.4)}, about ${usd(full * 0.4 * 0.06 * weeks / 52)}`, time: '10 min a week' },
+  ];
+  if (cat === 'CDP' || cat === 'CDP Manager') return [
     { text: `Open a vault on ${p.name} ${on} with ${usd(ticket)}-${usd(full)} of collateral and mint its stablecoin at a collateral ratio of 250% or more, well clear of liquidation.`, cost: `${usd(full)} collateral, the mint fee or stability rate + ${tx(x, 3)}`, time: '20 min' },
-    { text: `Put the minted stablecoin into the protocol's own stability pool or its main liquidity pool: CDP points usually reward both minting and keeping the stable at home.`, cost: tx(x, 2), time: '10 min, then a weekly ratio check' },
+    { text: `Put the minted stablecoin into the protocol's own stability pool or its main liquidity pool: a CDP programme usually rewards both minting and keeping the stable at home.`, cost: tx(x, 2), time: '10 min, then a weekly ratio check' },
   ];
   if (cat === 'Basis Trading') return [
-    { text: `Mint or deposit into ${p.name}'s yield-bearing product ${on} with ${usd(ticket)}-${usd(full)}; basis-trade products pay a funding-rate yield on top of points, so the position earns while it farms.`, cost: `${usd(full)} deposited (earns funding yield) + ${tx(x, 2)}`, time: '15 min' },
-    { text: `Stake or lock the receipt token where a points multiplier is offered, but only for a cooldown you accept: these products often hold withdrawals 7 days or more when funding turns negative.`, cost: `${tx(x, 1)}; opportunity cost of a 7-day exit queue`, time: '5 min' },
+    { text: `Mint or deposit into ${p.name}'s yield-bearing product ${on} with ${usd(ticket)}-${usd(full)}; a basis product pays a funding-rate yield on top of points, so the position earns while it farms.`, cost: `${usd(full)} deposited (earns funding yield) + ${tx(x, 2)}`, time: '15 min' },
+    { text: `Stake or lock the receipt token where a points multiplier is offered, but only for a cooldown you accept: basis products often hold withdrawals 7 days or more when funding turns negative.`, cost: `${tx(x, 1)}; opportunity cost of a 7-day exit queue`, time: '5 min' },
   ];
   if (cat === 'Risk Curators' || cat === 'Onchain Capital Allocator') return [
-    { text: `Deposit ${usd(ticket)}-${usd(full)} into a ${p.name}-curated USDC or ETH vault ${on}; curated vault balances are tracked per block, so time-weighted balance is what counts.`, cost: `${usd(full)} deposited (earns the vault APY) + ${tx(x, 2)}`, time: '15 min' },
+    { text: `Deposit ${usd(ticket)}-${usd(full)} into a ${p.name}-curated USDC or ETH vault ${on}; a curator tracks balances per block, so time-weighted balance is what counts.`, cost: `${usd(full)} deposited (earns the vault APY) + ${tx(x, 2)}`, time: '15 min' },
     { text: `Split across two of its vaults (a stablecoin and an ETH vault) rather than one: a curator spreading rewards across products tends to credit breadth of use.`, cost: tx(x, 2), time: '10 min' },
   ];
   if (sector === 'Yield & vaults') return [
-    { text: `Deposit ${usd(ticket)}-${usd(full)} into ${p.name}'s largest vault ${on}; the vault's own yield covers the gas while points accrue on the balance.`, cost: `${usd(full)} deposited (earns the vault yield) + ${tx(x, 2)}`, time: '15 min' },
+    { text: `Deposit ${usd(ticket)}-${usd(full)} into ${p.name}'s largest ${cat.toLowerCase()} vault ${on}; the vault's own yield covers the gas while points accrue on the balance.`, cost: `${usd(full)} deposited (earns the vault yield) + ${tx(x, 2)}`, time: '15 min' },
     { text: `Keep the vault's receipt token in the wallet that deposited (do not move it to a lending market unless that market is listed as boosted): off-protocol receipts often stop earning points.`, cost: '$0', time: '0 min, a rule to keep' },
   ];
   if (sector === 'RWA & CeDeFi') return [
@@ -90,7 +100,7 @@ function actions(sector: string, cat: string, x: Ctx): Step[] {
     { text: `Subscribe ${usd(ticket)}-${usd(full)} to its main product and note its redemption terms (T+1 to T+30 is common for real-world assets): the airdrop clock runs on the held balance.`, cost: `${usd(full)} held (earns the product's yield) + ${tx(x, 2)}`, time: '15 min' },
   ];
   if (cat === 'Chain') return [
-    { text: `Bridge ${usd(ticket)} to ${p.chains[0] ?? chain} through its canonical bridge, then use two or three of its top applications; chain campaigns reward bridged value and distinct contracts used.`, cost: `bridge fee + ${tx(x, 6)}`, time: '45 min' },
+    { text: `Bridge ${usd(ticket)} to ${p.chains[0] ?? chain} through its canonical bridge, then use two or three of its top applications; a chain campaign rewards bridged value and distinct contracts used.`, cost: `bridge fee + ${tx(x, 6)}`, time: '45 min' },
     { text: `Keep part of the balance on the chain for the campaign: a chain's distribution usually checks a balance held at snapshot, not only activity.`, cost: '$0 beyond the capital parked', time: '0 min' },
   ];
   if (cat === 'Staking Pool' || cat === 'Restaking') return [
@@ -98,9 +108,27 @@ function actions(sector: string, cat: string, x: Ctx): Step[] {
     { text: `Pick the operator or pool with the longest record, since slashing hits the pool you chose; stake only what you could leave locked for the unbonding period.`, cost: 'slashing risk on the stake', time: '15 min of reading' },
   ];
   return [
-    { text: `Use ${p.name}'s main product ${on} with ${usd(ticket)}-${usd(full)}: deposit where it takes deposits, or trade where it is a venue, and keep the position for the campaign instead of cycling in and out.`, cost: `${usd(full)} put to work + ${tx(x, 2)}`, time: '20 min' },
+    { text: `Use ${p.name}'s main ${cat.toLowerCase()} product ${on} with ${usd(ticket)}-${usd(full)}: deposit where it takes deposits, or trade where it is a venue, and keep the position for the campaign instead of cycling in and out.`, cost: `${usd(full)} put to work + ${tx(x, 2)}`, time: '20 min' },
     { text: `Try each of its other features once with under $100, since breadth of use is a common distribution criterion where a points programme's rules are not published.`, cost: `under $100 + ${tx(x, 4)}`, time: '20 min' },
   ];
+}
+
+/** The one risk that decides this plan, from the protocol's own record. */
+function mainRisk(p: Protocol, v: Valuation, verdict: Verdict, sector: string, weeks: number): string {
+  const cat = p.category ?? 'Uncategorised';
+  if (verdict.flags.length) return `Token risk: ${verdict.flags[0]}.`;
+  if (v.age !== null && v.age < 365) return `Smart contract: only ${Math.round(v.age / 30)} months tracked, so the record is short and a bug would take the deposit with it.`;
+  if (sector === 'Credit') return 'Liquidation: a borrow or mint position can be liquidated on a fast move, and the points stop with the position.';
+  if (sector === 'Trading') return 'Trading cost: fees and slippage are a certain cost against an uncertain drop.';
+  if (/Basis|RWA|CeDeFi|Staking|Restaking|Risk Curators|Allocator/.test(cat)) return `Lockups: ${cat} products often queue withdrawals for days to weeks, so the capital is committed for the ${weeks}-week horizon.`;
+  return 'No token is announced: the implied value is a model estimate, and a launch may never come.';
+}
+
+/** The rule that ends the plan, with the numbers from this protocol's own record. */
+function stopRule(x: Ctx, f: { slice: number; odds: number }): string {
+  const floor = Math.round(x.p.tvl_usd * 0.85);
+  const tail = f.odds < 0.2 ? `it needs ${Math.round((x.full * 0.02) / Math.max(1, f.slice) * 100)}% odds to break even` : `the model's break-even is ${Math.round((x.full * 0.02) / Math.max(1, f.slice) * 100)}% odds`;
+  return `Stop if TVL stays under ${usd(floor)} (15% below today's ${usd(x.p.tvl_usd)}) for two straight weeks, or if no points programme is confirmed within ${x.weeks} weeks: withdraw to the ${usd(x.ticket)} test ticket and wait, because ${tail}.`;
 }
 
 export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string, m: Fitted): Plan {
@@ -114,20 +142,20 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   const age = v.age;
   const weeks = age === null ? 16 : age < 180 ? 26 : age < 540 ? 16 : 12;
   const c7 = p.change_7d ?? 0;
-  const x: Ctx = { p, v, chain, cheap, gas, ticket, full, weeks, per1k, c7, age };
   const cat = p.category ?? 'Uncategorised';
+  const x: Ctx = { p, v, chain, cheap, gas, ticket, full, weeks, per1k, c7, age, cat };
   const share = (full / p.tvl_usd) * 1e4; // basis points of TVL a full position holds
 
   const pre = M.farm(m, p, v, verdict.flags.length, full, weeks, 0); // payout side only; costs come with the steps
   const steps: Step[] = [];
-  steps.push({ text: `Open ${p.name}'s app from its DefiLlama listing (slug ${p.slug}), bookmark it, and match its contract addresses against its docs; farm from one fresh wallet funded only for this.`, cost: '$0', time: '10 min' });
+  steps.push({ text: `Open ${p.name}'s app from its DefiLlama listing (slug ${p.slug}), bookmark it, and match its contract addresses against its docs; this is a ${cat.toLowerCase()} record on ${p.chains.slice(0, 3).join(', ')}, so farm from one fresh wallet funded only for this.`, cost: '$0', time: '10 min' });
   steps.push(cheap
-    ? { text: `Farm on ${chain}${p.chains.length > 1 ? ` (it also runs on ${p.chains.filter((c) => c !== chain).slice(0, 3).join(', ')})` : ''}: bridge ${usd(ticket)} of USDC there first, since a transaction costs about $${gas.toFixed(2)} and weekly actions stay cheap.`, cost: `$1-$5 bridge fee`, time: '15 min' }
-    : { text: `Farm on ${chain}, its ${p.chains.length === 1 ? 'only' : 'main'} chain, where a transaction costs about $${gas}: batch actions and keep at least ${usd(ticket)} in so gas stays under 2% of the position.`, cost: `~$${gas * 2} to fund the wallet`, time: '15 min' });
-  steps.push(...actions(sector, cat, x));
-  steps.push({ text: `Hold for ${weeks} weeks${age !== null ? ` (${p.name} has run ${Math.round(age / 30)} months with no token)` : ''}: ${usd(full)} is ${share >= 1 ? share.toFixed(1) : share.toFixed(2)} bp of its ${big(p.tvl_usd)} TVL, worth ${usd(pre.slice)} if a token launches (${(USER_SHARE * 100).toFixed(0)}% to users, pro rata); the fitted odds of a launch within 12 months are ${Math.round(pre.odds * 100)}%, so about ${usd(pre.expected)} expected.`, cost: `${tx(x, Math.ceil(weeks / 4))} for monthly top-ups`, time: `10 min a week, ${Math.round(weeks * 10 / 60)} h in all` });
+    ? { text: `Farm on ${chain}${p.chains.length > 1 ? ` (it also runs on ${p.chains.filter((c) => c !== chain).slice(0, 3).join(', ')})` : ''}: bridge ${usd(ticket)} of USDC there first, since a ${cat.toLowerCase()} transaction costs about $${gas.toFixed(2)} and weekly actions stay cheap.`, cost: `$1-$5 bridge fee`, time: '15 min' }
+    : { text: `Farm on ${chain}, its ${p.chains.length === 1 ? 'only' : 'main'} chain, where a ${cat.toLowerCase()} transaction costs about $${gas}: batch actions and keep at least ${usd(ticket)} in so gas stays under 2% of the position.`, cost: `~$${gas * 2} to fund the wallet`, time: '15 min' });
+  steps.push(...actions(sector, x));
+  steps.push({ text: `Hold for ${weeks} weeks${age !== null ? ` (${p.name} has run ${Math.round(age / 30)} months with no token)` : ''}: ${usd(full)} is ${share >= 1 ? share.toFixed(1) : share.toFixed(2)} bp of its ${big(p.tvl_usd)} ${cat.toLowerCase()} TVL, worth ${usd(pre.slice)} if a token launches (${(USER_SHARE * 100).toFixed(0)}% to users, pro rata); the fitted odds of a launch within 12 months are ${Math.round(pre.odds * 100)}%, so about ${usd(pre.expected)} expected.`, cost: `${tx(x, Math.ceil(weeks / 4))} for monthly top-ups`, time: `10 min a week, ${Math.round(weeks * 10 / 60)} h in all` });
   steps.push(c7 < -10
-    ? { text: `Re-check TVL weekly: it fell ${c7.toFixed(1)}% in the last 7 days, so if it falls another 15%, withdraw to the test ticket and wait for a turn.`, cost: tx(x, 1), time: '5 min a week' }
+    ? { text: `Re-check TVL weekly: it fell ${c7.toFixed(1)}% in the last 7 days, so if it falls another 15% (below ${usd(Math.round(p.tvl_usd * 0.85))}) withdraw to the test ticket and wait for a turn.`, cost: tx(x, 1), time: '5 min a week' }
     : c7 > 10
       ? { text: `Move early: TVL rose ${c7.toFixed(1)}% in 7 days, so the points pool is diluting fast; set the full ${usd(full)} position inside the first week.`, cost: tx(x, 2), time: '15 min' }
       : { text: `Scale from the ${usd(ticket)} test ticket to ${usd(full)} once a first small withdrawal clears, so the exit path is tested before the money is.`, cost: tx(x, 3), time: '15 min' });
@@ -167,7 +195,10 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   if (sector === 'Credit') risks.push(`Liquidation: a borrow or mint position can be liquidated on a fast move; keep the health factor well above the minimum.`);
   for (const f of verdict.flags) risks.push(`Token risk: ${f}.`);
   risks.push(`No token is announced: the implied value is a model estimate, and a launch may never come.`);
-  return { priority, why, chain, per_1k: per1k, capital: [ticket, full], weeks, gas_usd: gas, total_cost: total, fees, drop, net, slice: f.slice, odds: f.odds, tbill: f.tbill, breakeven: f.breakeven, hours: Math.round(minutes / 6) / 10, gas: cheap ? `about $${gas.toFixed(2)} a transaction on ${chain}` : `about $${gas} a transaction on ${chain}`, steps, risks };
+  return { priority, why, chain, per_1k: per1k, capital: [ticket, full], weeks, gas_usd: gas, total_cost: total, fees, drop, net,
+    slice: f.slice, odds: f.odds, tbill: f.tbill, breakeven: f.breakeven, hours: Math.round(minutes / 6) / 10,
+    main_risk: mainRisk(p, v, verdict, sector, weeks), stop_rule: stopRule(x, f),
+    gas: cheap ? `about $${gas.toFixed(2)} a transaction on ${chain}` : `about $${gas} a transaction on ${chain}`, steps, risks };
 }
 
 /** A step as one board string: what to do, then its cost and time. */

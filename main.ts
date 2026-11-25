@@ -78,6 +78,8 @@ const board = scored.map(({ p, v, plan: f, sector }, i) => ({
   farm_expected_drop_usd: f.drop,
   farm_net_usd: f.net,
   farm_hours: f.hours,
+  farm_main_risk: f.main_risk,
+  farm_stop_rule: f.stop_rule,
   risks: f.risks,
 }));
 
@@ -92,6 +94,20 @@ board.forEach((r, i) => {
 });
 if (new Set(board.map((r) => r.implied_value_usd)).size < 2) fail('every implied value is the same');
 
+// Plans must be written from the protocol, not a template with a name swapped: two rows of different categories
+// may not share the same step text once names, slugs and numbers are taken out.
+function stepSignature(name: string, slug: string, steps: string[]): string {
+  return steps.join(' ').toLowerCase().split(name.toLowerCase()).join(' ').split(slug.toLowerCase()).join(' ')
+    .replace(/[0-9][0-9.,%$+\-x×kKmMbB]*/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+const sigs = board.map((r) => ({ slug: r.slug, category: r.category, sig: stepSignature(r.name, r.slug, r.farm_steps) }));
+for (let i = 0; i < sigs.length; i++) for (let j = i + 1; j < sigs.length; j++) {
+  if (sigs[i]!.category !== sigs[j]!.category && sigs[i]!.sig === sigs[j]!.sig) fail(`plans of ${sigs[i]!.slug} and ${sigs[j]!.slug} are the same text in different categories`);
+}
+for (const r of board) for (const s of r.farm_steps) {
+  if (!/Cost: .+\. Time: .+\.$/.test(s)) fail(`${r.slug}: a farm step without a cost and a time`);
+}
+
 // The dashboard's dataset: compact rows (keys are short to keep data.js small) and the model's own figures.
 const radar = {
   as_of: snap.as_of,
@@ -104,12 +120,14 @@ const radar = {
     live: Object.values(verdicts).filter((x) => x.status === 'live').length,
     excluded: Object.values(verdicts).filter((x) => x.status === 'excluded').length,
   },
-  fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.useCat },
-  tests: model.tests.map((t) => ({ name: t.name, mae: t.mae, w2: t.within_2x })),
-  odds: { c0: model.odds.c0, c1: model.odds.c1, n: model.odds.n, bins: model.odds.bins },
+  fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.cat, cap: model.cap, ridge: model.ridge },
+  tests: model.tests.map((t) => ({ name: t.name, mae: t.mae, hit: t.hit, applied: !!t.applied })),
+  cal: model.cal,
+  odds: { c0: model.odds.c0, c1: model.odds.c1, c2: model.odds.c2, c3: model.odds.c3, n: model.odds.n, bins: model.odds.bins, pick: model.odds.pick, logloss: model.odds.logloss, base_logloss: model.odds.base_logloss,
+    tests: model.odds.tests.map((t) => ({ name: t.name, logloss: t.logloss, brier: t.brier })) },
   tbill: M.TBILL,
   flag_odds: M.FLAG_ODDS,
-  global: { q25: model.global.q25, median: model.global.median, q75: model.global.q75 },
+  global: { q25: model.spread.q25, median: model.spread.median, q75: model.spread.q75 },
   k: M.K,
   user_share: USER_SHARE,
   sectors: M.SECTORS,
@@ -120,7 +138,7 @@ const radar = {
     at: p.listed_at, age: v.age, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, ifl: v.ifl, od: v.odds, cy: v.carry, m: v.multiple, conf: v.confidence,
     cp: v.parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts[p.slug]!.reason, fl: verdicts[p.slug]!.flags,
     pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net, sl: f.slice, oh: f.odds, tb: f.tbill, be: f.breakeven,
-    st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks,
+    st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks, mr: f.main_risk, sr: f.stop_rule,
   })),
   comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: M.sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
   excluded: snap.protocols.filter((p) => verdicts[p.slug]!.status === 'excluded')
