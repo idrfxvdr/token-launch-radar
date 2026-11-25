@@ -123,7 +123,7 @@ const radar = {
   fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.cat, cap: model.cap, ridge: model.ridge },
   tests: model.tests.map((t) => ({ name: t.name, mae: t.mae, hit: t.hit, applied: !!t.applied })),
   cal: model.cal,
-  odds: { c0: model.odds.c0, c1: model.odds.c1, c2: model.odds.c2, c3: model.odds.c3, n: model.odds.n, bins: model.odds.bins, pick: model.odds.pick, logloss: model.odds.logloss, base_logloss: model.odds.base_logloss,
+  odds: { c0: model.odds.c0, c1: model.odds.c1, c2: model.odds.c2, c3: model.odds.c3, feats: model.odds.feats, n: model.odds.n, bins: model.odds.bins, pick: model.odds.pick, logloss: model.odds.logloss, base_logloss: model.odds.base_logloss,
     tests: model.odds.tests.map((t) => ({ name: t.name, logloss: t.logloss, brier: t.brier })) },
   tbill: M.TBILL,
   flag_odds: M.FLAG_ODDS,

@@ -209,7 +209,7 @@
     }
     return c;
   }
-  function oddsAt(c, p) { return 1 / (1 + Math.exp(-dot(c, design(ODDS_FEATS, p)))); }
+  function oddsAt(c, p, feats) { return 1 / (1 + Math.exp(-dot(c, design(feats, p)))); }
   function oddsPoints(snap, verdicts) {
     var pts = [];
     snap.protocols.forEach(function (p) {
@@ -224,7 +224,7 @@
     var ll = 0, br = 0, n = pts.length;
     pts.forEach(function (_, i) {
       var c = logitFit(pts.filter(function (__, j) { return j !== i; }), feats);
-      var pr = clamp(oddsAt(c, pts[i]), 0.001, 0.999);
+      var pr = clamp(oddsAt(c, pts[i], feats), 0.001, 0.999);
       ll += pts[i].y ? Math.log(pr) : Math.log(1 - pr); br += Math.pow(pr - pts[i].y, 2);
     });
     return { logloss: r3(-ll / Math.max(1, n)), brier: r3(br / Math.max(1, n)) };
@@ -234,15 +234,17 @@
       .map(function (t) { var r = oddsTest(pts, t[1]); return { name: t[0], feats: t[1], logloss: r.logloss, brier: r.brier }; });
   }
 
-  /** The smallest held-out gain (dex) that justifies adding a term: below it the term is noise. */
-  var GAIN = 0.005;
+  /** One selection rule for BOTH models: a term is kept only when it lowers the held-out error by more
+ *  than MARGIN relative to the model without it (1%). The same margin, held out, decides the size curve
+ *  (error in dex) and the launch odds (log loss); no model gets its own threshold. */
+  var MARGIN = 0.01;
   function fit(snap, verdicts) {
     var fams = tokenFamilies(snap), rows = rowsOf(fams), vs = variants(rows), i;
     var flat = looFlat(rows);
     vs.forEach(function (v) { var r = looV(rows, v); v.mae = r.mae; v.hit = r.hit; });
-    // Forward selection: a term is applied only when it lowers the held-out error by more than GAIN.
+    // Forward selection by the one rule: keep a term only when it beats the current model by > MARGIN relative.
     var pick = vs[0];
-    for (i = 1; i < vs.length; i++) if (vs[i].mae < pick.mae - GAIN) pick = vs[i];
+    for (i = 1; i < vs.length; i++) if (vs[i].mae < pick.mae * (1 - MARGIN)) pick = vs[i];
     vs.forEach(function (v) { v.applied = v === pick; });
     // The range is the leave-one-out error quartiles: what a family the fit has not seen actually misses by.
     var errs = looErrors(rows, pick), spread = group(errs), cats = {};
@@ -254,8 +256,9 @@
       return { slug: p.slug, name: p.name, category: p.category, symbol: p.symbol, records: p.records, tvl: p.tvl, mcap: p.mcap,
         multiple: r3(p.mcap / p.tvl), resid: r3(insample[j]), x: insample[j] };
     });
-    var pts = oddsPoints(snap, verdicts), otests = oddsTests(pts), opick = otests[1];
-    for (i = 2; i < otests.length; i++) if (otests[i].logloss < opick.logloss - 1e-9) opick = otests[i];
+    var pts = oddsPoints(snap, verdicts), otests = oddsTests(pts), opick = otests[0];
+    // Same one rule as the size curve: keep a term only when it beats the current model by > MARGIN relative.
+    for (i = 1; i < otests.length; i++) if (otests[i].logloss < opick.logloss * (1 - MARGIN)) opick = otests[i];
     var oc = logitFit(pts, opick.feats), bins = [0, 1, 2, 3, 4, 5].map(function (b) {
       var q = pts.filter(function (p) { return p.a >= b && p.a < b + 1; });
       return { from: b, to: b + 1, n: q.length, share: r3(q.reduce(function (t, p) { return t + p.y; }, 0) / Math.max(1, q.length)) };
@@ -266,7 +269,7 @@
       odds_logloss: opick.logloss, odds_flat_logloss: otests[0].logloss };
     return { as_of: snap.as_of, a: r3(w[0]), b: r3(w[1]), w: w, feats: pick.feats, ridge: pick.ridge || 0, cap: pick.cap || 0,
       cat: pick.cat, n: fams.length, tests: vs, loo_mae: pick.mae, spread: spread, cats: cats, secs: {}, comps: comps, cal: cal,
-      odds: { c0: r3(oc[0]), c1: r3(oc[1]), c2: r3(oc[2]), c3: r3(oc[3]), k: oc, feats: opick.feats, n: pts.length, tests: otests,
+      odds: { c0: r3(oc[0]), c1: r3(oc[1] || 0), c2: r3(oc[2] || 0), c3: r3(oc[3] || 0), k: oc, feats: opick.feats, n: pts.length, tests: otests,
         pick: opick.name, bins: bins, logloss: opick.logloss, base_logloss: otests[1].logloss } };
   }
 
@@ -277,7 +280,7 @@
   var FLAG_ODDS = 0.3;
   function launchOdds(m, age, tvl, c7) {
     var o = m.odds, g = Math.log10(1 + Math.max(-90, c7 === null ? 0 : c7) / 100);
-    var at = function (a) { return oddsAt(o.k, { a: Math.min(6, a), lx: Math.log10(Math.max(1, tvl)), g: g }); };
+    var at = function (a) { return oddsAt(o.k, { a: Math.min(6, a), lx: Math.log10(Math.max(1, tvl)), g: g }, o.feats); };
     var f = at(age); return clamp((at(age + 1) - f) / Math.max(1e-6, 1 - f), 0, 1);
   }
   /** The category premium of one protocol, from the fitted groups (n/(n+K) against zero). */
