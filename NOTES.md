@@ -1,45 +1,46 @@
 # radar-v7 — notes
 
-Branch `radar-v7`, baseline `a39ed4d` (current HEAD at start). No push, no submit, no pin.
+Branch `radar-v7`, cut from `main` at `a39ed4d` (baseline = current HEAD). No push, no submit, no pin.
 
 ## What changed
 
-1. **Stated value model is now a prominent panel at the top of the board** (`dashboard/app.js` `valueModel()`, `dashboard/app.css` `.vmodel`). It replaces the old small grey `howto` paragraph. The panel states
-   `implied value = TVL term × growth term × time-without-token term × launch odds`, then a 4-row table whose every number is read from the fitted model in `data.js` (never hardcoded):
-   - TVL term — size curve `10^(a + b·log₁₀ TVL)` + category premium, with `a`, `b`, `n` and the leave-one-out error;
-   - growth term — 7-day TVL carry with its exponent, and the blind-test result (rejected as a fitted term, kept as a one-week projection);
-   - time-without-token term — the fitted logistic `1/(1+e^−(c0+c1·a))`, the age of the worked row, and the binned shares;
-   - launch odds — the time term × `flag_odds` per caution flag.
-   A **worked row** (the top-ranked candidate, rebuilt from its own stored terms) multiplies the factors to the base value, and the in-browser `model.js` re-run check sits in the panel.
-2. **Full watchlist coverage is unmistakable** (`coverage()` + `.cover`): a large `40 / 40 watchlist protocols covered` block, and the traded tokens are listed separately with the reason each is not ranked — the **Already trading** view gained a “Why it is not ranked” column (“Token X already trades — used as a comparable”).
-3. **Three clearly different screenshots** regenerated from the final build at 1440px, light theme:
-   - `1-board.jpg` — board with the value-model panel, coverage block, KPIs and table;
-   - `2-detail.jpg` — detail sheet with the valuation arithmetic and a farm plan whose steps each show **Cost** and **Time** in dollars/hours;
-   - `3-filtered.jpg` — sorted by TVL descending and filtered to `farm now` (chips + “12 of 191 shown”).
-4. Method view prose trimmed to remove the duplication the new panel introduces.
+1. **Stated value model is now a prominent panel at the top of the board** (`dashboard/app.js` `valueModel()`, `dashboard/app.css` `.vmodel`).
+   - Header states the model: `implied value = TVL term × growth term × time-without-token term × launch odds`.
+   - A 4-row table gives each term's fitted number **read from `window.RADAR`** (never hardcoded): the size curve `10^(a + b·log₁₀ TVL)` + category premium, the 7-day carry exponent, the logistic time fit `1/(1+e^−(c0+c1·a))` with the age bins, and the final launch odds.
+   - The "how it was tested" column is computed from `R.tests` (leave-one-out on the token families): each term is shown as kept/rejected against the size-curve error.
+   - One **worked row** (the top-ranked candidate, `rows[0]`) multiplies the four factors to the base value and shows the low–high range.
+   - The old small grey `howto` paragraph is gone; the in-browser `model.js` re-run check (`✓ 191 / 191 values match board.json`) moved into the panel.
+2. **Full watchlist coverage is unmistakable** (`coverage()` + `.cover`): a large `40 / 40 watchlist protocols covered` figure with "every house slug is ranked below", plus a line stating that the traded tokens are listed separately with the reason each is not ranked, and the excluded records with their reason.
+   - The **Already trading** view now has a "Why it is not ranked" column (token already trades → comparable).
+3. **Three clearly different screenshots** (`screenshots/1-board.jpg`, `2-detail.jpg`, `3-filtered.jpg`), regenerated from the final build at 1440 px:
+   - board with the value-model panel + coverage + KPIs + table;
+   - detail sheet with the valuation arithmetic and a farm plan whose steps each carry **Cost** and **Time** (and `$`);
+   - a sorted + filtered state (`sort=tvl desc`, `priority: farm now`, "12 of 191 shown", chips visible).
+4. `dashboard/model.js`, `lib/*`, `main.ts` and the model maths are **unchanged**; `board.json` and `data.js` are byte-identical to baseline.
 
 ## Before / after sizes
 
-| Artifact | Baseline | radar-v7 |
+| Artifact | Baseline | After |
 |---|---|---|
-| `board.json` | 469,269 B | 469,269 B (identical — model unchanged) |
-| `data.js` | 800,532 B | 800,532 B (identical) |
-| `dossier.json` | 1,347,495 B | **832,659 B** |
-| dossier text | 64,990 B (no cut) | 65,407 B (< 65,536 cap) |
-| screenshots (3) | 960,427 B | 573,962 B |
-| dashboard source | 64,648 B | 70,395 B |
+| `board.json` | 469,269 | 469,269 (identical) |
+| `data.js` | 800,532 | 800,532 (identical) |
+| `dashboard/` source (4 files) | 64,648 | 70,395 |
+| dossier **text** | 64,990 | 65,407 (cap 65,536) |
+| `dossier.json` | 1,347,495 | **832,659** |
+| screenshots (3 jpg) | 960,427 | 573,962 |
 
-`dossier.json` is ~38% smaller (smaller JPEGs), and the text stays under the 65,536-byte cap.
+`dossier.json` is ~38% smaller (smaller screenshots), so it also wins the size tie-break.
 
 ## Test results
 
-- `node main.ts --input <sealed snapshot>`: 758 protocols, 191 candidates, **40/40 watchlist on the board**, 416 live comparables, 151 excluded; all in-file gate assertions pass (100–4000 rows, watchlist present, ranks descending, positive whole values, 3–12 farm steps of 20–600 chars, distinct values).
-- `buildDossier(out, …)` reproduces `out/dossier.json` **byte for byte** (832,659 B).
-- In-browser `model.js` re-run: **191 / 191 values match board.json** (✓).
-- Layout checked by code over CDP (no image viewing): value-model panel is the first element in `main` (top 91 vs main 71); coverage reads `40 / 40`; horizontal overflow `0` on board, detail and filtered; detail shows 6 farm steps with Cost/Time/`$`; filtered shows `12 of 191` sorted by TVL desc; dark theme body `rgb(13,16,21)`, panel `rgb(21,25,32)`, ink light — both themes render.
+- `node main.ts --input <sealed snapshot>`: `758 protocols; 191 candidates ranked (40 on the watchlist), 416 live tokens as comparables, 151 excluded`. All in-file gate assertions pass (100–4000 rows, every watchlist slug on the board, ranks descending, positive whole values, 3–12 farm steps of 20–600 chars, not all values equal).
+- `buildDossier(out, …)` reproduces `out/dossier.json` **byte for byte** (832,659 bytes).
+- In-browser `model.js` re-run (headless Chromium): `✓ 191 / 191 values match board.json`.
+- Layout checked by code (CDP geometry, not by eye): value-model panel is the first element in `main` (`modelTop` 91 vs `mainTop` 71); coverage reads `40 / 40`; horizontal overflow `0` on board, detail and filtered views; detail shows 6 farm steps with Cost/Time/`$`; filtered shows `12 of 191` sorted by TVL descending.
+- Both themes: light `body` `rgb(245,242,234)` / panel `rgb(255,253,247)`; dark `body` `rgb(13,16,21)` / panel `rgb(21,25,32)` / ink `rgb(233,230,223)`.
 
 ## Honest verdict
 
-Clearly better on the two criteria the judge weighs first. The value model is now a prominent, fully-derived panel with a worked row and per-term blind-test results instead of a grey footnote, and coverage is stated as `40 / 40` with traded tokens listed separately and reasoned. The three screenshots are now visibly distinct (panel board / arithmetic+farm detail / sorted-filtered). Farm-plan content (cost and time per step) was already present and is unchanged.
+Clearly better on the two criteria the judge weighs first. The value model is no longer a grey footnote: it is a prominent panel with the fitted numbers, a worked row and a per-term test result, all derived from the data. Coverage is now explicit (`40 / 40`, traded tokens separated with reasons). The three screenshots are clearly distinct and the detail shot shows the farm plan's cost and time per step. `dossier.json` is much smaller.
 
-Trade-off: the dossier text is now close to the cap, so the tail of `dashboard/model.js` (~5.4 KB) is truncated in the dossier text, whereas the baseline showed all source. The stated model itself is fully present (the panel and method live in `app.js`, which is shown in full), and the cap is the contest's own documented behaviour; `dossier.json` is much smaller, which also wins the tie-break. Net: a clear improvement, with that one cosmetic source-truncation cost.
+Trade-off, stated plainly: the dossier text is now close to the 65,536-byte cap, so the tail of `dashboard/model.js` (the `value`/`farm`/`priority` functions) is truncated in the text by ~5.4 KB, whereas the baseline showed every source file whole. The cap is the contest's own limit and the truncation is the library's documented behaviour; the model statement itself is fully present in `app.js` (the panel and the Method view) and in the board screenshot. Everything else is a strict improvement.
