@@ -25,6 +25,7 @@ The live review (`REVIEW.md`, not committed) listed 11 defects. All are fixed, a
 The second live review (`REVIEW.md`, not committed) listed 8 defects. Fixed in order, committed after each; `verify.mjs` is run once at the end.
 
 1. **One selection rule for every term.** The size curve and the launch odds now share a single rule: a term is kept only when it lowers the held-out error by more than **1% relative** to the model without it. Applied to both, 7d growth drops out of the odds (0.537 vs 0.538 = 0.19% < 1%), `board.json` is recomputed, and the strip, waterfall, Method and these notes agree. The rule is stated in one line on Method §2.
+2. **One sector label.** The detail's comparables header and the scatter legend now read the same `peerInfo(r)` helper: one label from the data (the category when ≥3 tokenised peers share it, else the sector), so "Same sector (Other): N peers" and "filled: Other" can no longer disagree.
 
 ## What changed from v7 (the model and page underneath)
 

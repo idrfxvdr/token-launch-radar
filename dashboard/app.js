@@ -204,8 +204,14 @@
       cell('Main risk', function (r) { return '<span class="muted">' + esc(r.mr) + '</span>'; }) + '</table></div></section>';
   }
 
+  // One peer label from the data, used by both the scatter legend and the comparables header.
+  function peerInfo(r) {
+    var sameCat = R.comps.filter(function (c) { return c.c === r.c; }), useCat = sameCat.length >= 3;
+    var basis = useCat ? sameCat : R.comps.filter(function (c) { return c.sec === r.sec; });
+    return { basis: basis, kind: useCat ? 'category' : 'sector', label: (useCat ? r.c : r.sec) || 'Uncategorised', slugs: basis.map(function (c) { return c.s; }) };
+  }
   function scatter(r) {
-    var W = 680, H = 240, P = 46, comps = R.comps;
+    var W = 680, H = 240, P = 46, comps = R.comps, info = peerInfo(r);
     function dec(t) { var u = ['', 'K', 'M', 'B', 'T'], k = Math.floor(t / 3); return '$' + Math.pow(10, t - 3 * k) + u[k]; }
     var xs = comps.map(function (c) { return Math.log10(c.tvl); }), ys = comps.map(function (c) { return Math.log10(c.mc); });
     var x0 = Math.floor(Math.min.apply(null, xs.concat([Math.log10(r.tvl)]))), x1 = Math.ceil(Math.max.apply(null, xs.concat([Math.log10(r.tvl)])));
@@ -217,22 +223,22 @@
     for (t = y0; t <= y1; t++) g += '<line x1="' + P + '" y1="' + Y(t) + '" x2="' + (W - 10) + '" y2="' + Y(t) + '" stroke="var(--line)"/><text x="' + (P - 4) + '" y="' + (Y(t) + 3) + '" text-anchor="end">' + dec(t) + '</text>';
     g += '<line x1="' + X(x0) + '" y1="' + Y(R.fit.a + R.fit.b * x0) + '" x2="' + X(x1) + '" y2="' + Y(R.fit.a + R.fit.b * x1) + '" stroke="var(--muted)" stroke-dasharray="5 4"/>';
     comps.forEach(function (c) {
-      var same = c.c === r.c, sec = c.sec === r.sec;
-      g += '<circle cx="' + X(Math.log10(c.tvl)).toFixed(1) + '" cy="' + Y(Math.log10(c.mc)).toFixed(1) + '" r="' + (same ? 4.5 : 3) + '" fill="' + (same ? 'var(--accent)' : sec ? 'var(--peer)' : 'none') + '" stroke="var(--peer)" opacity="' + (same || sec ? 0.95 : 0.6) + '"><title>' + esc(c.n + ' (' + c.sym + '): ' + usd(c.mc) + ' cap on ' + usd(c.tvl) + ' TVL') + '</title></circle>';
+      var inBasis = info.slugs.indexOf(c.s) >= 0;
+      g += '<circle cx="' + X(Math.log10(c.tvl)).toFixed(1) + '" cy="' + Y(Math.log10(c.mc)).toFixed(1) + '" r="' + (inBasis ? 4.5 : 3) + '" fill="' + (inBasis ? 'var(--accent)' : 'none') + '" stroke="var(--peer)" opacity="' + (inBasis ? 0.95 : 0.6) + '"><title>' + esc(c.n + ' (' + c.sym + '): ' + usd(c.mc) + ' cap on ' + usd(c.tvl) + ' TVL') + '</title></circle>';
     });
     var k = r.ifl / r.b, cx = X(Math.log10(r.tvl));
     g += '<line x1="' + cx + '" y1="' + Y(Math.log10(r.lo * k)) + '" x2="' + cx + '" y2="' + Y(Math.log10(r.hi * k)) + '" stroke="var(--hi)" stroke-width="3" stroke-linecap="round"/><circle cx="' + cx + '" cy="' + Y(Math.log10(r.ifl)) + '" r="6" fill="var(--bg)" stroke="var(--hi)" stroke-width="3"/>';
     var lbl = esc(r.n) + ' if launched ' + usd(r.ifl), flip = cx > W * 0.55;
     g += '<text x="' + (flip ? cx - 9 : cx + 9) + '" y="' + (Y(Math.log10(r.ifl)) + 4) + '" text-anchor="' + (flip ? 'end' : 'start') + '" style="fill:var(--ink);font-weight:700">' + lbl + '</text>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Market cap against TVL for ' + comps.length + ' tokenised protocols">' + g + '</svg>' +
-      '<p class="muted" style="font-size:12px;margin:4px 0 0">Dots: the ' + comps.length + ' families whose token trades (filled: ' + esc(r.c) + '; grey: ' + esc(r.sec) + '). Dashed: the size curve. Bar and ring: this protocol if launched, low–high to base.</p>';
+      '<p class="muted" style="font-size:12px;margin:4px 0 0">Dots: the ' + comps.length + ' families whose token trades (filled: ' + esc(info.label) + ', ' + info.basis.length + ' peers; grey: the rest). Dashed: the size curve. Bar and ring: this protocol if launched, low–high to base.</p>';
   }
   function peers(r) {
-    var same = R.comps.filter(function (c) { return c.c === r.c; }), basis = same.length >= 3 ? same : R.comps.filter(function (c) { return c.sec === r.sec; });
+    var info = peerInfo(r), same = R.comps.filter(function (c) { return c.c === r.c; }), basis = info.basis;
     var near = basis.slice().sort(function (a, b) { return Math.abs(Math.log10(a.tvl / r.tvl)) - Math.abs(Math.log10(b.tvl / r.tvl)) || (a.s < b.s ? -1 : 1); }).slice(0, 4);
-    if (!near.length) return '<p class="muted">No tokenised peer in this sector: the size curve is the market-wide one.</p>';
+    if (!near.length) return '<p class="muted">No tokenised peer in this ' + info.kind + ': the size curve is the market-wide one.</p>';
     var mults = basis.map(function (c) { return c.x; }).sort(function (a, b) { return a - b; }), med = mults[Math.floor(mults.length / 2)];
-    return '<p class="muted" style="margin:0 0 6px">' + (same.length >= 3 ? 'Same category' : 'Same sector (' + esc(r.sec) + ')') + ': ' + basis.length + ' tokenised peers, median market cap / TVL ' + mult(med) + '; this row\'s implied ' + mult(r.m) + '.</p>' +
+    return '<p class="muted" style="margin:0 0 6px">' + (info.kind === 'category' ? 'Same category' : 'Same sector') + ' (' + esc(info.label) + '): ' + basis.length + ' tokenised peers, median market cap / TVL ' + mult(med) + '; this row\'s implied ' + mult(r.m) + '.</p>' +
       '<table class="peers"><thead><tr><th>Peer (nearest TVL)</th><th class="n">TVL</th><th class="n">Mcap</th><th class="n">Mcap/TVL</th><th class="n">vs curve</th></tr></thead><tbody>' +
       near.map(function (c) { return '<tr><td>' + esc(c.n) + ' <span class="muted">' + esc(c.sym) + '</span></td><td class="n">' + usd(c.tvl) + '</td><td class="n">' + usd(c.mc) + '</td><td class="n">' + mult(c.x) + '</td><td class="n">' + vsCurve(c) + '</td></tr>'; }).join('') + '</tbody></table>';
   }
