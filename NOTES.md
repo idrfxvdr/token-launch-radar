@@ -40,7 +40,7 @@ PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"p
 PASS  every column sorts  — 9 columns, both directions
 PASS  no horizontal overflow (3 widths, 2 themes)  — 1440/1024/390 light+dark all 0
 PASS  no console error  — none
-PASS  no network request  — 6 requests, all file://
+PASS  no network request  — 0 requests, all file://
 
 15/15 checks passed
 ```
