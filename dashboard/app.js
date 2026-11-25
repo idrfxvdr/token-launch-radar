@@ -13,6 +13,19 @@
   function mult(x) { return (x >= 0.1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toFixed(4)) + '×'; }
   function vsCurve(c) { return times(Math.log10(c.mc) - (R.fit.a + R.fit.b * Math.log10(c.tvl))); }
   function bePct(be) { return be >= 1 ? 'cannot break even (' + Math.round(be * 100) + '%)' : Math.round(be * 100) + '%'; }
+  // Point 4: the smallest computed change to one lever (position, gas, odds) that would make this plan break
+  // even, listed only where such a change exists. All figures come from the row's own plan fields.
+  function breakEvenChange(r) {
+    var user = R.user_share, tbill = R.tbill, pos = r.cap[1], h = r.wk / 52, slice = user * r.ifl * pos / r.tvl;
+    var tb = tbill * pos * h, tc = r.tc, od = r.od, out = [];
+    var A = user * r.ifl / r.tvl * od - tbill * h;            // net per $ of position, before fixed costs
+    if (A > 0) { var pStar = tc / A; if (pStar > pos + 1) out.push('position to ' + usd(Math.ceil(pStar)) + ' (+' + usd(Math.ceil(pStar - pos)) + ')'); }
+    var tcStar = slice * od - tb;                              // the cost that leaves net = 0
+    if (tcStar >= 0 && tcStar < tc - 0.5) out.push('gas & fees to ~$' + Math.round(tcStar) + ' (−$' + Math.round(tc - tcStar) + ')');
+    var odStar = (tc + tb) / Math.max(1e-9, slice);            // the odds that leave net = 0
+    if (odStar > od + 1e-4 && odStar <= 0.995) out.push('odds to ' + Math.round(odStar * 100) + '% (+' + Math.round((odStar - od) * 100) + ' pts)');
+    return out;
+  }
   // The launch-odds linear predictor, built from the fitted features (no hard-coded term set).
   function oddsLin(o, a, lx, g) { var z = o.c0; if (o.feats.indexOf('a') >= 0) z += o.c1 * a; if (o.feats.indexOf('lx') >= 0) z += o.c2 * lx; if (o.feats.indexOf('g') >= 0) z += o.c3 * g; return z; }
   function oddsFormula(o) { var s = 'F(a)=1/(1+e^−(' + o.c0; if (o.feats.indexOf('a') >= 0) s += '+' + o.c1 + 'a'; if (o.feats.indexOf('lx') >= 0) s += '+' + o.c2 + '·log₁₀TVL'; if (o.feats.indexOf('g') >= 0) s += '+' + o.c3 + '·log₁₀(1+7d)'; return s + '))'; }
@@ -20,7 +33,7 @@
   var PR = { 'farm now': 'now', watch: 'watch', skip: 'skip' }, PR_ORDER = { 'farm now': 0, watch: 1, skip: 2 };
   function pill(p) { return '<span class="pill ' + PR[p] + '">' + esc(p) + '</span>'; }
 
-  var DEF = { view: 'board', q: '', cat: '', chain: '', tvl: '', conf: '', pr: '', w: '', sort: 'r', dir: 'asc', p: '', cmp: '', asm: '', g: '', o: '', sh: '' };
+  var DEF = { view: 'board', q: '', cat: '', chain: '', tvl: '', conf: '', pr: '', w: '', sort: 'net', dir: 'desc', p: '', cmp: '', asm: '', g: '', o: '', sh: '' };
   function read() {
     var s = Object.assign({}, DEF), h = new URLSearchParams(location.hash.slice(1));
     Object.keys(DEF).forEach(function (k) { if (h.has(k)) s[k] = h.get(k); });
@@ -182,7 +195,7 @@
     var a = assumptions(s), list = sorted(filtered(s), s, a), picked = (s.cmp || '').split(',').filter(Boolean);
     var body = list.map(function (r) { return rowHtml(r, a, picked.indexOf(r.s) >= 0); }).join('');
     return kpis() + strip() + '<div id="checks" class="checks run" aria-live="polite"></div>' + toolbar(s) + chips(s, list.length) +
-      '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols ranked by implied launch value</caption><thead><tr>' +
+      '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols, sorted by net; the # column is the implied-value rank</caption><thead><tr>' +
       th(s, 'r', '#', 'n') + th(s, 'n', 'Protocol') + th(s, 'c', 'Category', 'hide-sm') + th(s, 'ch', 'Chains', 'hide-md') +
       th(s, 'tvl', 'TVL · 7d', 'n') + th(s, 'od', '12-mo odds · age', 'n hide-sm') + th(s, 'b', 'Implied value = if launched × odds') +
       th(s, 'conf', 'Conf.', 'n hide-sm') + th(s, 'pr', 'Farm · net') + '<th scope="col" class="cmp">±</th>' +
@@ -285,6 +298,7 @@
       '<div class="facts2"><div><b>Main risk</b><p>' + esc(r.mr) + '</p></div><div><b>Stop rule</b><p>' + esc(r.sr) + '</p></div></div>' +
       '<ol class="steps">' + r.st.map(function (st, i) { return '<li><label><input type="checkbox" data-step="' + i + '"' + (done[i] ? ' checked' : '') + '><span>' + esc(st[0]) + ' <span class="ct">' + (st[3] ? '<i class="when">' + esc(st[3]) + ' · </i>' : '') + '<i>Cost ' + esc(st[1]) + '</i> · <i>Time ' + esc(st[2]) + '</i></span></span></label></li>'; }).join('') + '</ol></div>' +
       '<div class="card"><h3>Risks</h3><ul class="risks">' + r.rk.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' +
+      '<div class="card"><h3>To break even</h3>' + (function () { if (r.net > 0) return '<p style="margin:0">This plan already clears break-even: net <b class="up">+$' + r.net + '</b>.</p>'; var be = breakEvenChange(r); return be.length ? '<p style="margin:0">Smallest change that would make this plan break even: ' + be.map(esc).join('; ') + '.</p>' : '<p class="muted" style="margin:0">No single change to position, gas or odds breaks even — it needs ' + bePct(r.be) + ' launch odds.</p>'; })() + '</div>' +
       '<div class="card"><h3>Launch odds from time with no token</h3>' + oddsChart(r) + '</div></div></div>';
     panel.onchange = function (e) {
       var i = e.target.getAttribute('data-step');
@@ -353,7 +367,7 @@
   var checksMounted = false;
   function render() {
     var s = read(), focusId = document.activeElement && document.activeElement.id;
-    document.getElementById('asof').textContent = 'Snapshot ' + R.as_of + ' · ' + rows.length + ' pre-token candidates ranked by implied launch value';
+    document.getElementById('asof').textContent = 'Snapshot ' + R.as_of + ' · ' + rows.length + ' pre-token candidates, sorted by net';
     app.innerHTML = s.view === 'live' ? live() : s.view === 'excluded' ? excluded() : s.view === 'method' ? method() : board(s);
     var TABS = { board: ['Board', rows.length], live: ['Already trading', R.comps.length], excluded: ['Excluded', R.excluded.length], method: ['Method', 7] };
     [].forEach.call(document.querySelectorAll('.tabs a'), function (t) {
