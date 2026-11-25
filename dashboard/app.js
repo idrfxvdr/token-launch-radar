@@ -287,6 +287,7 @@
     panel.scrollTop = 0;
     panel.focus();
   }
+  window.RadarDetail = detail; // test hook: render one detail sheet by slug without re-rendering the board
   function live() {
     var c = R.comps.slice().sort(function (a, b) { return b.mc - a.mc || (a.s < b.s ? -1 : 1); });
     return '<div class="prose"><h2>Already trading: the comparables</h2><p><b>' + R.counts.live + '</b> records carry a token and are kept off the board. Records sharing a symbol form one family (TVL summed, market cap counted once): these <b>' + c.length + '</b> families price every candidate. "vs curve" is market cap against the size curve.</p></div>' +

@@ -241,28 +241,22 @@ else {
   const stripOk = stripTxt.includes(Math.round(r1.od * 100) + '%') && stripTxt.includes(usd1(r1.b)) && !/NaN/.test(stripTxt);
   check('strip value equals row #1', stripOk, stripOk ? `#1 ${r1.n}: ${Math.round(r1.od * 100)}% and ${usd1(r1.b)}, no NaN` : `strip "${stripTxt.slice(0, 90)}" != ${Math.round(r1.od * 100)}% / ${usd1(r1.b)}`);
   // every detail sheet: break-even in the plan equals the stop rule, "cannot break even" above 100%.
-  // One in-page pass (not 191 outside round-trips): set the hash, wait for the sheet to show the right
-  // row, read the panel. Keeps the renderer in one evaluate and never hangs the socket.
+  // Render each sheet directly (window.RadarDetail) instead of driving 191 hash changes that each
+  // rebuild the whole board: one synchronous pass, no socket round-trips, no renderer churn.
   const slugs = await ev(`window.RADAR.rows.map(r=>r.s)`);
-  const detail = await ev(`(async () => {
+  const detail = await ev(`(() => {
     const out = [];
     for (const r of window.RADAR.rows) {
-      location.hash = '#p=' + r.s;
-      let ok = false;
-      for (let i = 0; i < 40; i++) {
-        await new Promise(res => setTimeout(res, 20));
-        const sh = document.getElementById('sheet'), p = document.getElementById('panel');
-        if (sh && !sh.hidden && p && /Break-even odds/.test(p.innerText)) { ok = true; break; }
-      }
+      window.RadarDetail(r.s);
       const p = document.getElementById('panel');
       const facts = [...p.querySelectorAll('.facts span')].map(x => x.innerText);
       const beFact = facts.find(x => /Break-even odds/.test(x)) || '';
       const sr = [...p.querySelectorAll('.facts2 p')].map(x => x.innerText).join(' ');
-      out.push({ s: r.s, ok, beFact, sr, txt: p.innerText });
+      out.push({ s: r.s, beFact, sr, txt: p.innerText });
     }
-    location.hash = '#view=board';
+    document.getElementById('sheet').hidden = true;
     return out;
-  })()`, 240000);
+  })()`, 120000);
   const beBad = [];
   for (const d of detail) {
     scanText(d.txt, 'detail ' + d.s);
@@ -270,7 +264,7 @@ else {
     const beNum = (/\d+/.exec(d.beFact) || [])[0];
     const srM = /break-even is (\d+)%/.exec(d.sr) || /needs (\d+)%/.exec(d.sr);
     const srNum = srM ? srM[1] : null;
-    if (!d.ok || beImp !== srImp || (!beImp && beNum !== srNum)) beBad.push(`${d.s}: plan "${d.beFact.replace(/\s+/g, ' ').trim()}" vs stop "${(d.sr.match(/break-even[^.]*|cannot break even[^.]*/) || [''])[0].trim()}"`);
+    if (beImp !== srImp || (!beImp && beNum !== srNum)) beBad.push(`${d.s}: plan "${d.beFact.replace(/\s+/g, ' ').trim()}" vs stop "${(d.sr.match(/break-even[^.]*|cannot break even[^.]*/) || [''])[0].trim()}"`);
     if (beBad.length > 8) break;
   }
   await ev(`location.hash='#view=board'`); await sleep(60);

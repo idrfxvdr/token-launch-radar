@@ -53,13 +53,13 @@ token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 liv
 
 == result ==
 PASS  two runs are byte-identical  — 12 files, all equal
-PASS  dashboard_files  — 5 files, 90114 bytes, html/css/js=true/true/true, network=none
+PASS  dashboard_files  — 5 files, 90222 bytes, html/css/js=true/true/true, network=none
 PASS  board_file  — 191 rows, all slugs known, values positive whole
 PASS  sorted_by_value  — ranks 1..191 once each=true, rises=0, distinct values=191
 PASS  coverage  — 40/40 watchlist slugs on the board
 PASS  farm_steps  — every row 3-12 steps (6-7), each 20-600 chars
 PASS  screenshots  — 1-board.jpg 229448B, 2-detail.jpg 250402B, 3-filtered.jpg 225725B, 4-method.jpg 168904B
-PASS  dossier_matches  — written 1233590 bytes, rebuilt 1233590 bytes, equal=true
+PASS  dossier_matches  — written 1233589 bytes, rebuilt 1233589 bytes, equal=true
 PASS  checks strip 6/6  — ✓ 6 of 6 checks passed in this browser
 PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":6}
 PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":18,"w":40}
@@ -74,7 +74,7 @@ PASS  no network request  — 0 requests, all file://
 18/18 checks passed
 ```
 
-`verify.mjs` does all of this itself: it runs `main.ts` twice into two directories and byte-compares every file, re-checks the gate's seven rows from the output, rebuilds the dossier with `buildDossier(out, {text_max_bytes: 65536})` and compares it byte for byte, then drives the page in headless Chromium (checks strip, tabs, filters, per-column sort in both directions, the rendered text of every tab and every detail sheet, overflow at three widths in both themes, console errors, network requests). The detail sweep runs as one in-page pass that waits for each sheet, so it cannot hang the socket.
+`verify.mjs` does all of this itself: it runs `main.ts` twice into two directories and byte-compares every file, re-checks the gate's seven rows from the output, rebuilds the dossier with `buildDossier(out, {text_max_bytes: 65536})` and compares it byte for byte, then drives the page in headless Chromium (checks strip, tabs, filters, per-column sort in both directions, the rendered text of every tab and every detail sheet, overflow at three widths in both themes, console errors, network requests). The detail sweep renders each sheet through `window.RadarDetail(slug)` (a test hook the page exposes) in one synchronous in-page pass, so it never re-renders the board 191 times and cannot hang the socket.
 
 ## Before / after sizes
 
@@ -82,9 +82,9 @@ PASS  no network request  — 0 requests, all file://
 |---|---|---|
 | `board.json` | 469,269 | 555,291 |
 | `data.js` | 800,532 | 857,492 |
-| `dashboard/` source (5 files) | 70,395 (4 files) | 90,114 (5 files) |
-| dossier **text** | 65,407 | 65,496 (cap 65,536) |
-| `dossier.json` | 832,659 (3 screenshots) | 1,233,590 (4 screenshots) |
+| `dashboard/` source (5 files) | 70,395 (4 files) | 90,222 (5 files) |
+| dossier **text** | 65,407 | 65,495 (cap 65,536) |
+| `dossier.json` | 832,659 (3 screenshots) | 1,233,589 (4 screenshots) |
 | screenshots | 573,962 (3 jpg) | 874,479 (4 jpg) |
 
 The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, and because the review fixes added the `bePct` / `vsCurve` / `mult` helpers and the best-net KPI line. The dossier text is capped at 65,536 bytes, so it shows `app.css`, `app.js` and `checks.js` whole and leaves out `index.html` and `model.js` (2 files, 24,979 bytes) — the cap is the contest's own and the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
