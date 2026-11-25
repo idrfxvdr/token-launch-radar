@@ -1,9 +1,7 @@
-/* Token Launch Radar: the model, the single source of every number on the board. main.ts runs it in Node to
-   write board.json; the page re-runs it on the raw snapshot in data.js and checks every value (checks.js).
-   No protocol is named: every rule reads the snapshot's own fields. Plain ES5, a classic script, no network.
-   Two fits, both chosen by leave-one-out on this snapshot and both reported against the simpler model:
-     value if launched  log10 mcap = a + b·log10 TVL   (+ tested terms: 7d carry, time without a token, category)
-     launch odds        logit P(token) = c0 + c1·age + c2·log10 TVL + c3·log10(1+7d) */
+/* Token Launch Radar model: the single source of every number on the board. main.ts runs it in Node to write
+   board.json; the page re-runs it on the raw snapshot and checks every value (checks.js). No protocol is named:
+   every rule reads the snapshot's own fields. Plain ES5, classic script, no network. Two fits, both chosen by
+   leave-one-out under one relative-margin rule and reported against the simpler model. */
 (function (root) {
   'use strict';
   var K = 4; // shrinkage: a group of n peers is weighted n / (n + K) against its parent

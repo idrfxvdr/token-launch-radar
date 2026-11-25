@@ -1,8 +1,8 @@
-// Typed access to the model in dashboard/model.js. The model lives in the dashboard so the page runs the very
+// Typed access to the model in dashboard/00-model.js. The model lives in the dashboard so the page runs the very
 // code that wrote board.json (and the judge reads it); Node evaluates the same classic script here, which sets
 // globalThis.RadarModel.
 
-import '../dashboard/model.js';
+import '../dashboard/00-model.js';
 
 export interface Protocol {
   slug: string; name: string; category: string | null; chains: string[]; tvl_usd: number; change_7d: number | null;

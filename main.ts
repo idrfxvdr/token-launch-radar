@@ -131,7 +131,7 @@ const radar = {
   k: M.K,
   user_share: USER_SHARE,
   sectors: M.SECTORS,
-  // The raw snapshot: the page refits dashboard/model.js on it and checks every implied value against this board.
+  // The raw snapshot: the page refits dashboard/00-model.js on it and checks every implied value against this board.
   snapshot: { as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd, watchlist: snap.watchlist, protocols: snap.protocols },
   rows: scored.map(({ p, v, plan: f, sector }, i) => ({
     r: i + 1, s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', sec: sector, ch: p.chains, tvl: p.tvl_usd, d7: p.change_7d,

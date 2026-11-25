@@ -182,7 +182,7 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
   const f = M.farm(m, p, v, verdict.flags.length, full, weeks, total);
   const drop = f.expected, net = f.net;
 
-  // The rule itself is RadarModel.priority (dashboard/model.js); here it is put into words.
+  // The rule itself is RadarModel.priority (dashboard/00-model.js); here it is put into words.
   const priority: Priority = M.priority(verdict.flags.length, v.confidence, c7, net, total);
   const beText = f.breakeven >= 1 ? `it cannot break even at any odds (needs ${(f.breakeven * 100).toFixed(0)}%)` : `break-even ${Math.round(f.breakeven * 100)}% odds`;
   let why: string;

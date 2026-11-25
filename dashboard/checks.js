@@ -13,7 +13,7 @@
       var x = M.value(f, p, v[r.s].flags.length);
       if (x.base === r.b && x.low === r.lo && x.high === r.hi) ok++; else bad.push(r.s);
     });
-    return result('values', 'model.js re-run reproduces every board value', ok, R.rows.length,
+    return result('values', '00-model.js re-run reproduces every board value', ok, R.rows.length,
       'classify() + fit() + value() ran again on the ' + R.snapshot.protocols.length + ' snapshot records in this browser: ' + ok + ' of ' + R.rows.length + ' rows match the board on implied value, low and high.' + (bad.length ? ' Misses: ' + bad.slice(0, 4).join(', ') : ' No row differs.'),
       'Fitted here: log₁₀ value = ' + f.a + ' + ' + f.b + '·log₁₀ TVL, leave-one-out error ' + f.loo_mae + ' dex on ' + f.n + ' traded-token families.');
   }
