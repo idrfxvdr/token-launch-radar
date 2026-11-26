@@ -154,6 +154,14 @@ const rebuilt = buildDossier(A, { text_max_bytes: 65536 });
 check('dossier_matches', Buffer.from(rebuilt).equals(written) && written.length <= 1.5 * 1024 * 1024,
   `written ${written.length} bytes, rebuilt ${rebuilt.length} bytes, equal=${Buffer.from(rebuilt).equals(written)}`);
 
+// every dashboard file must appear WHOLE in the dossier text: no "[Cut at …" line and each file's
+// bytes found verbatim. The text cap is the contest's, so this proves the source is not truncated.
+const dossierText = JSON.parse(written.toString('utf8')).text;
+const cut = /\[Cut at \d+ bytes/.test(dossierText);
+const notWhole = dashFiles.filter((f) => !dossierText.includes(readFileSync(join(dashDir, f), 'utf8')));
+check('dossier text shows every dashboard file whole', !cut && notWhole.length === 0,
+  cut ? 'the text carries a "[Cut at …" line' : notWhole.length ? `not whole: ${notWhole.join(', ')}` : `${dashFiles.length} files whole in ${Buffer.byteLength(dossierText)} text bytes`);
+
 // ---------- 3. the page in headless Chromium ----------
 section('headless page');
 const PORT = 9360;

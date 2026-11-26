@@ -1,16 +1,10 @@
-/* Token Launch Radar — the model.
-   Every number on the board comes from here. main.ts runs this file under Node to emit board.json; the
-   browser runs the very same file on the raw snapshot and re-derives every value (checks.js). No protocol
-   is hard-coded: each rule reads only fields the snapshot already carries. Plain ES5, classic script, no
-   network. Two fits are produced — a size curve and a launch-odds curve — and each term is kept only when
-   its leave-one-out error beats the simpler model by the one shared relative margin, then reported against it. */
+/* Token Launch Radar — the model. Every number on the board comes from here; main.ts runs this file under
+   Node to emit board.json and the browser runs the same file on the raw snapshot (checks.js). Plain ES5. */
 (function (root) {
   'use strict';
 
-  // How strongly a peer group is pulled toward its parent: a group of n members counts n / (n + SHRINK).
   var SHRINK = 4;
 
-  // Every category, mapped to the sector it belongs to. Anything unlisted falls through to "Other".
   var SECTOR_MAP = {
     Trading: 'Dexs Derivatives Options Prediction Market Interest Rate Derivatives OTC Marketplace Launchpad NFT Marketplace Perps',
     Credit: 'Lending CDP CDP Manager Uncollateralized Lending Collateral Markets Collateral Management Dual-Token Stablecoin Stablecoin Wrapper',
@@ -25,7 +19,6 @@
     return 'Other';
   }
 
-  /* ---------- 1. classify each record: live token, pre-token candidate, or a product of a traded token ---------- */
   var DERIVATIVE_CATEGORIES = ['Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'Bridge', 'Canonical Bridge', 'CEX', 'Anchor BTC'];
   var EXCHANGE_NAMES = ['binance', 'coinbase', 'bybit', 'kraken', 'bitget', 'okx', 'bitfinex', 'gemini', 'htx', 'kucoin', 'gate', 'mexc', 'crypto.com'];
   var DERIVATIVE_WORDS = /\b(wrapped|staked|staking|restaked|bridged|liquid staking)\b/i;
@@ -33,8 +26,6 @@
   var GENERIC_WORDS = 'the liquid finance protocol money capital labs network dao swap yield vault vaults pool pools lend earn staking bridge exchange markets market stable usd btc eth sol open base one pro prime core x';
   GENERIC_WORDS = GENERIC_WORDS.split(' ');
 
-  // The first distinctive word of a name, used to link a record to a family that already trades. A word
-  // shorter than four letters, or a generic finance word, is no use as a family key.
   function familyKeyOf(name) {
     var first = name.toLowerCase().replace(VERSION_SUFFIX, '').split(/[\s\-_.:()/]+/).filter(function (w) { return w; })[0] || '';
     var word = first.replace(/[^a-z0-9]/g, '');
@@ -45,12 +36,10 @@
   function classifyRecords(snap) {
     var tokenByFamily = {}, house = {}, verdict = {};
     snap.watchlist.forEach(function (slug) { house[slug] = 1; });
-    // First pass: remember which family keys already have a trading token, and under what symbol.
     snap.protocols.forEach(function (p) {
       var key = familyKeyOf(p.name);
       if (key && recordsToken(p) && !tokenByFamily[key]) tokenByFamily[key] = p.symbol || p.gecko_id;
     });
-    // Second pass: decide each record's fate and collect any caution flags that travel with it.
     snap.protocols.forEach(function (p) {
       if (recordsToken(p)) {
         verdict[p.slug] = { status: 'live', reason: 'Records the token ' + (p.symbol || p.gecko_id) + ': already launched, used as a comparable.', flags: [] };
@@ -79,7 +68,6 @@
     return verdict;
   }
 
-  /* ---------- 2. comparables: one entry per traded token, with its records' TVL summed ---------- */
   function ageInYears(listedAt, asOf) {
     return listedAt === null ? null : (Date.parse(asOf + 'T00:00:00Z') - Date.parse(listedAt + 'T00:00:00Z')) / 864e5 / 365;
   }
@@ -111,7 +99,6 @@
     return families.sort(function (x, y) { return x.slug < y.slug ? -1 : 1; });
   }
 
-  /* ---------- 3. small maths ---------- */
   function round3(x) { return Math.round(x * 1000) / 1000; }
   function percentile(sortedInput, q) {
     var s = sortedInput.slice().sort(function (a, b) { return a - b; });
@@ -122,7 +109,6 @@
   function medianOf(v) { return percentile(v, 0.5); }
   function summarise(v) { return { n: v.length, median: percentile(v, 0.5), q25: percentile(v, 0.25), q75: percentile(v, 0.75) }; }
 
-  // Ordinary least squares via normal equations and Gaussian elimination with partial pivoting.
   function solveLeastSquares(rows, feats) {
     var k = feats.length + 1, A = [], b = [], i, j, r;
     for (i = 0; i < k; i++) { A.push([]); b.push(0); for (j = 0; j < k; j++) A[i].push(0); }
@@ -141,9 +127,6 @@
   function innerProduct(w, v) { return w.reduce(function (t, x, i) { return t + x * v[i]; }, 0); }
   function featureRow(feats, r) { return [1].concat(feats.map(function (f) { return r[f]; })); }
 
-  /* ---------- 4. value if launched: fit the size curve, each term left out and refitted ----------
-     The rows are the snapshot's token families: y = log10 mcap, x = log10 TVL, c7 = log10(1 + 7d growth),
-     age in years. A term is applied only when its held-out error beats the model without it; all variants report. */
   function familyRows(fams) {
     return fams.map(function (p) {
       return { y: Math.log10(p.mcap), x: Math.log10(p.tvl), c7: Math.log10(1 + Math.max(-90, p.c7 === null ? 0 : p.c7) / 100), age: p.age === null ? 2 : p.age, cat: p.category || 'Uncategorised' };
@@ -156,8 +139,6 @@
   }
   function clampTo(x, a, b) { return Math.max(a, Math.min(b, x)); }
 
-  // One variant's prediction for row i, fitted on all the others. `cap` carries TVL forward, clamped to
-  // [1/cap, cap]; `ridge` shrinks the 7d term; `cat` adds the shrunk category offset.
   function predictVariant(rows, rest, i, v) {
     var w = solveLeastSquares(rest, v.feats), r = rows[i], x = r.x;
     if (v.cap) x = Math.log10(Math.pow(10, r.x) * clampTo(Math.pow(10, r.c7), 1 / v.cap, v.cap));
@@ -166,25 +147,21 @@
     if (v.cat) g += categoryOffset(rest, w, v.feats, r.cat);
     return g;
   }
-  // The category median residual, shrunk toward zero by n/(n+SHRINK): the category term, usually rejected.
   function categoryOffset(rows, w, feats, cat) {
     var own = [];
     rows.forEach(function (r) { if (r.cat === cat) own.push(r.y - innerProduct(w, featureRow(feats, r))); });
     return own.length ? own.length / (own.length + SHRINK) * medianOf(own) : 0;
   }
-  // Leave-one-out errors of a variant: one refit per family, its held-out error in dex (log10).
   function heldOutErrors(rows, v) {
     var errs = [], n = rows.length;
     for (var i = 0; i < n; i++) errs.push(rows[i].y - predictVariant(rows, rows.filter(function (_, j) { return j !== i; }), i, v));
     return errs;
   }
-  // Mean absolute held-out error, and the share of families priced within 2x.
   function scoreVariant(rows, v) {
     var errs = heldOutErrors(rows, v), e = 0, hit = 0;
     errs.forEach(function (x) { e += Math.abs(x); if (Math.abs(x) <= Math.log10(2)) hit++; });
     return { mae: round3(e / errs.length), hit: round3(hit / errs.length) };
   }
-  // Nested coverage: each held-out family's band is the quartiles of the other families' own errors.
   function coverageScore(rows, v) {
     var errs = heldOutErrors(rows, v), inside = 0;
     for (var i = 0; i < errs.length; i++) {
@@ -193,7 +170,6 @@
     }
     return round3(inside / errs.length);
   }
-  // The flat baseline: every family priced at the median market cap / TVL of the rest.
   function flatBaseline(rows) {
     var e = 0, hit = 0, n = rows.length;
     for (var i = 0; i < n; i++) {
@@ -203,7 +179,6 @@
     }
     return { mae: round3(e / n), hit: round3(hit / n) };
   }
-  // Nested: the ridge strength is chosen by 5-fold CV inside each outer training set.
   function chooseRidge(rows) {
     var grid = [0, 0.5, 1], best = 0, bestE = Infinity;
     grid.forEach(function (s) {
@@ -219,7 +194,6 @@
     });
     return best;
   }
-  // Every variant the value fit may apply, in the order they are tested.
   function candidateVariants(rows) {
     var s = chooseRidge(rows);
     return [
@@ -233,12 +207,8 @@
     ];
   }
 
-  /* ---------- 5. launch odds: a logistic on age, TVL and 7d growth ----------
-     P(token by age a) = 1/(1+e^-(c0 + c1·a + c2·log10 TVL + c3·log10(1+7d))); a protocol with no token at
-     age a launches within h years with probability (F(a+h) - F(a)) / (1 - F(a)). */
   var ODDS_FEATURES = ['a', 'lx', 'g'];
 
-  // Newton-Raphson on the logistic log-likelihood, with a touch of ridge so a rare split cannot run away.
   function fitLogit(pts, feats) {
     var k = feats.length + 1, c = new Array(k).fill(0), it, i, j, r;
     for (it = 0; it < 25; it++) {
@@ -249,7 +219,7 @@
         for (i = 0; i < k; i++) { g[i] += v[i] * (p.y - pr); for (j = 0; j < k; j++) H[i][j] += w * v[i] * v[j]; }
       });
       var A = H.map(function (row, i2) { return row.concat([g[i2]]); });
-      for (i = 0; i < k; i++) A[i][i] += 1e-2; // a little ridge: keeps a rare split from running the logit away
+      for (i = 0; i < k; i++) A[i][i] += 1e-2;
       for (i = 0; i < k; i++) {
         var pivot = i; for (r = i + 1; r < k; r++) if (Math.abs(A[r][i]) > Math.abs(A[pivot][i])) pivot = r;
         var tmp = A[i]; A[i] = A[pivot]; A[pivot] = tmp;
@@ -273,7 +243,6 @@
     });
     return pts;
   }
-  // Held-out log loss and Brier score, each protocol left out in turn.
   function scoreOdds(pts, feats) {
     var ll = 0, br = 0, n = pts.length;
     pts.forEach(function (_, i) {
@@ -288,20 +257,15 @@
       .map(function (t) { var r = scoreOdds(pts, t[1]); return { name: t[0], feats: t[1], logloss: r.logloss, brier: r.brier }; });
   }
 
-  // One selection rule for BOTH models: a term is kept only when it lowers the held-out error by more than
-  // MARGIN relative to the model without it (1%). The same margin, held out, decides the size curve (error in
-  // dex) and the launch odds (log loss); no model gets its own threshold.
   var MARGIN = 0.01;
 
   function fitModel(snap, verdicts) {
     var fams = collectFamilies(snap), rows = familyRows(fams), vs = candidateVariants(rows), i;
     var flat = flatBaseline(rows);
     vs.forEach(function (v) { var r = scoreVariant(rows, v); v.mae = r.mae; v.hit = r.hit; });
-    // Forward selection by the one rule: keep a term only when it beats the current model by > MARGIN relative.
     var pick = vs[0];
     for (i = 1; i < vs.length; i++) if (vs[i].mae < pick.mae * (1 - MARGIN)) pick = vs[i];
     vs.forEach(function (v) { v.applied = v === pick; });
-    // The range is the leave-one-out error quartiles: what a family the fit has not seen actually misses by.
     var errs = heldOutErrors(rows, pick), spread = summarise(errs), cats = {};
     rows.forEach(function (r, j) { (cats[r.cat] = cats[r.cat] || []).push(errs[j]); });
     for (var c in cats) cats[c] = summarise(cats[c]);
@@ -314,7 +278,6 @@
       };
     });
     var pts = buildOddsPoints(snap, verdicts), otests = candidateOdds(pts), opick = otests[0];
-    // Same one rule as the size curve: keep a term only when it beats the current model by > MARGIN relative.
     for (i = 1; i < otests.length; i++) if (otests[i].logloss < opick.logloss * (1 - MARGIN)) opick = otests[i];
     var oc = fitLogit(pts, opick.feats), bins = [0, 1, 2, 3, 4, 5].map(function (b) {
       var q = pts.filter(function (p) { return p.a >= b && p.a < b + 1; });
@@ -334,10 +297,6 @@
     };
   }
 
-  /* ---------- 6. the implied value of one pre-token protocol ----------
-     if launched:  10^(a + b·log10 TVL carried) x category premium
-     launch odds: 1 - F(a) over the next year, from the fitted logistic on age, TVL and 7d growth
-     implied:      if launched x odds x 0.3 per caution flag        <- ranked */
   var FLAG_ODDS = 0.3;
 
   function probabilityOfLaunch(m, age, tvl, c7) {
@@ -345,7 +304,6 @@
     var at = function (a) { return sigmoidAt(o.k, { a: Math.min(6, a), lx: Math.log10(Math.max(1, tvl)), g: g }, o.feats); };
     var f = at(age); return clampTo((at(age + 1) - f) / Math.max(1e-6, 1 - f), 0, 1);
   }
-  // The category offset of one protocol, from the fitted groups (n/(n+SHRINK) against zero).
   function categoryDetail(m, cat) {
     var own = m.cats[cat], wc = own ? own.n / (own.n + SHRINK) : 0;
     return {
@@ -380,7 +338,6 @@
     };
   }
 
-  /* ---------- 7. farm economics: net = users' share x value if launched x position / TVL x odds - gas - fees - T-bill ---------- */
   var USER_SHARE = 0.07, TBILL = 0.04;
 
   function farmEconomics(m, p, v, flagCount, position, weeks, costs) {
