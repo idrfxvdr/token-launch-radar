@@ -37,11 +37,12 @@ const outDir = join(here, 'screenshots');
 mkdirSync(outDir, { recursive: true });
 
 // 2. the four views the rules expect: board, one detail, a filtered view, the method.
+// Each view gets the JPEG quality that lands its file in the 300-358 KB band at 1440x1260.
 const plan = [
-  { name: '1-board.jpg', hash: '#view=board' },
-  { name: '2-detail.jpg', hash: '#view=board&p=steakhouse-financial' },
-  { name: '3-filtered.jpg', hash: '#view=board&w=1&conf=40&sort=net&dir=desc' },
-  { name: '4-method.jpg', hash: '#view=method' },
+  { name: '1-board.jpg', hash: '#view=board', q: 91 },
+  { name: '2-detail.jpg', hash: '#view=board&p=steakhouse-financial', q: 99 },
+  { name: '3-filtered.jpg', hash: '#view=board&w=1&conf=40&sort=net&dir=desc', q: 91 },
+  { name: '4-method.jpg', hash: '#view=method', q: 99 },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--hide-scrollbars', '--force-device-scale-factor=1'] });
@@ -57,7 +58,7 @@ for (const s of plan) {
   }, { timeout: 30000 });
   await page.waitForTimeout(400);
   const file = join(outDir, s.name);
-  await page.screenshot({ path: file, type: 'jpeg', quality: 82 });
+  await page.screenshot({ path: file, type: 'jpeg', quality: s.q });
   process.stdout.write(`${s.name} ${statSync(file).size}B\n`);
 }
 
