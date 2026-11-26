@@ -1,14 +1,13 @@
-// Token Launch Radar: make.fun token-radar-01 entry. Node 22.18+, standard library only, no network.
+// Token Launch Radar — make.fun token-radar-01 entrypoint.
+// Node 22.18+, standard library only, no network, deterministic (no clock, no randomness).
 //
-// Reads the sealed DefiLlama snapshot (/input/snapshot.json, or --input <file|dir>), classifies every protocol
-// (lib/classify.ts), values each pre-token candidate against the tokenised peers in the same snapshot
-// (lib/value.ts), writes a farm plan per row (lib/plans.ts), and writes to /output (or MAKEFUN_OUTPUT_DIR):
-//   board.json    the ranked board, one row per candidate, the whole house watchlist included
-//   data.js       the dashboard's dataset (window.RADAR), beside dashboard/
-//   dashboard/    the static page, copied from this repository
-//   screenshots/  copied from this repository
-//   dossier.json  written last by vendor/makefun-board.ts's buildDossier
-// Deterministic: no clock, no randomness, every sort broken by slug.
+// Input   /input/snapshot.json (or --input <file|dir>)
+// Output  /output (or --output <dir> / MAKEFUN_OUTPUT_DIR):
+//           board.json    ranked board, one row per pre-token candidate
+//           data.js       window.RADAR, the dashboard's dataset
+//           dashboard/    the static page, copied from this repository
+//           screenshots/  copied from this repository
+//           dossier.json  written last by vendor/makefun-board.ts's buildDossier
 //
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../token-radar-01-kit/input/snapshot.json
 
@@ -21,6 +20,8 @@ import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const IMAGE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+
+// ---- command line -----------------------------------------------------------------------------
 
 function arg(name: string, fallback: string): string {
   const at = process.argv.indexOf(`--${name}`);
@@ -38,12 +39,15 @@ const inputFile = inputArg.endsWith('.json') ? inputArg : join(inputArg, 'snapsh
 if (!existsSync(inputFile)) fail(`no snapshot at ${inputFile}: pass --input <snapshot.json|dir>`);
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
+// ---- read the snapshot, classify, fit, value, plan --------------------------------------------
+
 const snap = parseSnapshot(readFileSync(inputFile, 'utf8'));
 const verdicts = M.classify(snap);
 const model = M.fit(snap, verdicts);
 const house = new Set(snap.watchlist);
 
 interface Scored { p: Protocol; v: Valuation; plan: Plan; sector: string; }
+
 const scored: Scored[] = snap.protocols
   .filter((p) => verdicts[p.slug]!.status === 'candidate')
   .map((p) => {
@@ -52,6 +56,8 @@ const scored: Scored[] = snap.protocols
     return { p, v, sector, plan: plan(p, v, verdicts[p.slug]!, sector, model) };
   })
   .sort((x, y) => y.v.base - x.v.base || (x.p.slug < y.p.slug ? -1 : 1));
+
+// ---- board rows -------------------------------------------------------------------------------
 
 const board = scored.map(({ p, v, plan: f, sector }, i) => ({
   rank: i + 1,
@@ -83,32 +89,40 @@ const board = scored.map(({ p, v, plan: f, sector }, i) => ({
   risks: f.risks,
 }));
 
-// The gate's own rules, checked before anything is written.
-if (board.length < 100 || board.length > 4000) fail(`${board.length} rows: the gate takes 100 to 4000`);
-for (const slug of snap.watchlist) if (!board.some((r) => r.slug === slug)) fail(`watchlist slug ${slug} is not on the board`);
-board.forEach((r, i) => {
-  if (i > 0 && r.implied_value_usd > board[i - 1]!.implied_value_usd) fail(`rank ${r.rank} is worth more than rank ${i}`);
-  if (!Number.isSafeInteger(r.implied_value_usd) || r.implied_value_usd < 1) fail(`${r.slug}: implied value must be a positive whole number`);
-  if (r.farm_steps.length < 3 || r.farm_steps.length > 12) fail(`${r.slug}: ${r.farm_steps.length} farm steps`);
-  for (const s of r.farm_steps) if (s.trim().length < 20 || s.trim().length > 600) fail(`${r.slug}: a farm step of ${s.trim().length} characters`);
-});
-if (new Set(board.map((r) => r.implied_value_usd)).size < 2) fail('every implied value is the same');
+// ---- the gate's own rules, checked before anything is written ---------------------------------
 
-// Plans must be written from the protocol, not a template with a name swapped: two rows of different categories
-// may not share the same step text once names, slugs and numbers are taken out.
+function checkGate(): void {
+  if (board.length < 100 || board.length > 4000) fail(`${board.length} rows: the gate takes 100 to 4000`);
+  for (const slug of snap.watchlist) if (!board.some((r) => r.slug === slug)) fail(`watchlist slug ${slug} is not on the board`);
+  board.forEach((r, i) => {
+    if (i > 0 && r.implied_value_usd > board[i - 1]!.implied_value_usd) fail(`rank ${r.rank} is worth more than rank ${i}`);
+    if (!Number.isSafeInteger(r.implied_value_usd) || r.implied_value_usd < 1) fail(`${r.slug}: implied value must be a positive whole number`);
+    if (r.farm_steps.length < 3 || r.farm_steps.length > 12) fail(`${r.slug}: ${r.farm_steps.length} farm steps`);
+    for (const s of r.farm_steps) if (s.trim().length < 20 || s.trim().length > 600) fail(`${r.slug}: a farm step of ${s.trim().length} characters`);
+  });
+  if (new Set(board.map((r) => r.implied_value_usd)).size < 2) fail('every implied value is the same');
+}
+checkGate();
+
+// Plans must come from the protocol, not a template with a name swapped: two rows of different
+// categories may not share the same step text once names, slugs and numbers are taken out.
 function stepSignature(name: string, slug: string, steps: string[]): string {
   return steps.join(' ').toLowerCase().split(name.toLowerCase()).join(' ').split(slug.toLowerCase()).join(' ')
     .replace(/[0-9][0-9.,%$+\-x×kKmMbB]*/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
-const sigs = board.map((r) => ({ slug: r.slug, category: r.category, sig: stepSignature(r.name, r.slug, r.farm_steps) }));
-for (let i = 0; i < sigs.length; i++) for (let j = i + 1; j < sigs.length; j++) {
-  if (sigs[i]!.category !== sigs[j]!.category && sigs[i]!.sig === sigs[j]!.sig) fail(`plans of ${sigs[i]!.slug} and ${sigs[j]!.slug} are the same text in different categories`);
+function checkPlansDistinct(): void {
+  const sigs = board.map((r) => ({ slug: r.slug, category: r.category, sig: stepSignature(r.name, r.slug, r.farm_steps) }));
+  for (let i = 0; i < sigs.length; i++) for (let j = i + 1; j < sigs.length; j++) {
+    if (sigs[i]!.category !== sigs[j]!.category && sigs[i]!.sig === sigs[j]!.sig) fail(`plans of ${sigs[i]!.slug} and ${sigs[j]!.slug} are the same text in different categories`);
+  }
+  for (const r of board) for (const s of r.farm_steps) {
+    if (!/Cost: .+\. Time: .+\.$/.test(s)) fail(`${r.slug}: a farm step without a cost and a time`);
+  }
 }
-for (const r of board) for (const s of r.farm_steps) {
-  if (!/Cost: .+\. Time: .+\.$/.test(s)) fail(`${r.slug}: a farm step without a cost and a time`);
-}
+checkPlansDistinct();
 
-// The dashboard's dataset: compact rows (keys are short to keep data.js small) and the model's own figures.
+// ---- the dashboard's dataset (short keys keep data.js small) ----------------------------------
+
 const radar = {
   as_of: snap.as_of,
   source: snap.source,
@@ -145,9 +159,7 @@ const radar = {
     .map((p) => ({ s: p.slug, n: p.name, c: p.category ?? 'Uncategorised', tvl: p.tvl_usd, why: verdicts[p.slug]!.reason })),
 };
 
-mkdirSync(out, { recursive: true });
-writeFileSync(join(out, 'board.json'), `${JSON.stringify({ as_of: snap.as_of, model: 'log-log comparables, see dashboard Methodology', rows: board })}\n`);
-writeFileSync(join(out, 'data.js'), `window.RADAR=${JSON.stringify(radar)};\n`);
+// ---- write the dataset, copy the page and screenshots, build the dossier ----------------------
 
 function copyFiles(from: string, to: string): string[] {
   if (!existsSync(from)) return [];
@@ -156,10 +168,16 @@ function copyFiles(from: string, to: string): string[] {
   for (const n of names) copyFileSync(join(from, n), join(to, n));
   return names;
 }
+
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, 'board.json'), `${JSON.stringify({ as_of: snap.as_of, model: 'log-log comparables, see dashboard Methodology', rows: board })}\n`);
+writeFileSync(join(out, 'data.js'), `window.RADAR=${JSON.stringify(radar)};\n`);
+
 const pages = copyFiles(join(here, 'dashboard'), join(out, 'dashboard'));
 const shots = copyFiles(join(here, 'screenshots'), join(out, 'screenshots'));
 for (const n of shots) if (!IMAGE_NAME.test(n)) fail(`screenshots/${n}: names are letters, digits and . _ -`);
 if (shots.length < 3) fail(`screenshots/ holds ${shots.length} images; the gate needs 3 (board, detail, filtered). board.json and data.js are written.`);
 
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: 65_536, screenshots: { max: 4, max_bytes: 524_288 }, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
+
 process.stdout.write(`token radar: ${snap.protocols.length} protocols; ${board.length} candidates ranked (${snap.watchlist.length} on the watchlist), ${radar.counts.live} live tokens as comparables, ${radar.counts.excluded} excluded; ${pages.length} dashboard files, ${shots.length} screenshots -> ${out}\n`);
