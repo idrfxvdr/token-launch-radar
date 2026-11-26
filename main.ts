@@ -1,13 +1,17 @@
 // Token Launch Radar — make.fun token-radar-01 entrypoint.
-// Node 22.18+, standard library only, no network, deterministic (no clock, no randomness).
 //
-// Input   /input/snapshot.json (or --input <file|dir>)
-// Output  /output (or --output <dir> / MAKEFUN_OUTPUT_DIR):
-//           board.json    ranked board, one row per pre-token candidate
-//           data.js       window.RADAR, the dashboard's dataset
-//           dashboard/    the static page, copied from this repository
-//           screenshots/  copied from this repository
-//           dossier.json  written last by vendor/makefun-board.ts's buildDossier
+// Node 22.18+, standard library only, no network, deterministic: no clock, no randomness, every sort
+// broken by slug. Reads the sealed snapshot, classifies every protocol, values each pre-token
+// candidate against the snapshot's own traded tokens, writes a farm plan per row, and renders the
+// static dashboard beside board.json and data.js.
+//
+//   input   /input/snapshot.json   (or --input <file|dir>)
+//   output  /output                (or --output <dir> / MAKEFUN_OUTPUT_DIR)
+//             board.json    the ranked board, one row per candidate, the whole watchlist included
+//             data.js       the dashboard's dataset (window.RADAR), beside dashboard/
+//             dashboard/    the static page, copied from this repository
+//             screenshots/  copied from this repository
+//             dossier.json  written last by vendor/makefun-board.ts's buildDossier
 //
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../token-radar-01-kit/input/snapshot.json
 
@@ -23,6 +27,7 @@ const IMAGE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 
 // ---- command line -----------------------------------------------------------------------------
 
+/** The value of `--name value` or `--name=value`, else the fallback. */
 function arg(name: string, fallback: string): string {
   const at = process.argv.indexOf(`--${name}`);
   if (at >= 0 && at + 1 < process.argv.length) return process.argv[at + 1]!;
@@ -39,7 +44,7 @@ const inputFile = inputArg.endsWith('.json') ? inputArg : join(inputArg, 'snapsh
 if (!existsSync(inputFile)) fail(`no snapshot at ${inputFile}: pass --input <snapshot.json|dir>`);
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
-// ---- read the snapshot, classify, fit, value, plan --------------------------------------------
+// ---- read, classify, fit, value, plan ---------------------------------------------------------
 
 const snap = parseSnapshot(readFileSync(inputFile, 'utf8'));
 const verdicts = M.classify(snap);
@@ -48,6 +53,7 @@ const house = new Set(snap.watchlist);
 
 interface Scored { p: Protocol; v: Valuation; plan: Plan; sector: string; }
 
+// Candidates only, each valued and planned, then ranked by implied value (ties broken by slug).
 const scored: Scored[] = snap.protocols
   .filter((p) => verdicts[p.slug]!.status === 'candidate')
   .map((p) => {
@@ -104,7 +110,7 @@ function checkGate(): void {
 }
 checkGate();
 
-// Plans must come from the protocol, not a template with a name swapped: two rows of different
+// Plans must be written from the protocol, not a template with a name swapped: two rows of different
 // categories may not share the same step text once names, slugs and numbers are taken out.
 function stepSignature(name: string, slug: string, steps: string[]): string {
   return steps.join(' ').toLowerCase().split(name.toLowerCase()).join(' ').split(slug.toLowerCase()).join(' ')
@@ -161,6 +167,7 @@ const radar = {
 
 // ---- write the dataset, copy the page and screenshots, build the dossier ----------------------
 
+/** Copy every regular, non-dot file from `from` into `to`, sorted by name; returns the names. */
 function copyFiles(from: string, to: string): string[] {
   if (!existsSync(from)) return [];
   mkdirSync(to, { recursive: true });
