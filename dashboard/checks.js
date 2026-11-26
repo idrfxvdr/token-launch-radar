@@ -1,4 +1,4 @@
-// checks.js — the live "checked in this browser" strip: six checks recomputed from window.RADAR.
+// checks.js — the live strip: six checks recomputed from window.RADAR.
 (function (root) {
   'use strict';
   var el = null, state = { done: false, checks: [] };

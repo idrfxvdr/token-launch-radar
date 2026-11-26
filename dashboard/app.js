@@ -1,4 +1,6 @@
-/* Token Launch Radar — the page. Every screen is drawn here: renderKpis + renderStrip (top), renderToolbar + renderChips (filters), renderBoard + rowHtml (table), detail (sheet), renderLive / renderExcluded / renderMethod (tabs), exportCsv (CSV). */
+/* Token Launch Radar — the page. Every screen is drawn here: renderKpis (KPI tiles), renderStrip (value strip),
+   renderToolbar + renderChips (filters), renderBoard + rowHtml (rank table, sorted by implied value),
+   detail (detail sheet), renderLive / renderExcluded / renderMethod (tabs), exportCsv (CSV). */
 (function () {
   'use strict';
   var R = window.RADAR, app = document.getElementById('app'), root = document.documentElement;
@@ -56,7 +58,7 @@
       '<select id="cat" aria-label="Category">' + options(cats, s.cat, 'All categories') + '</select>' +
       '<select id="chain" aria-label="Chain">' + options(chains, s.chain, 'All chains') + '</select>' +
       '<select id="tvl" aria-label="TVL band">' + options(Object.keys(BANDS), s.tvl, 'Any TVL') + '</select>' +
-      '<select id="conf" aria-label="Confidence"><option value="">Any confidence</option>' + ['40', '55', '70'].map(function (c) { return '<option value="' + c + '"' + (s.conf === c ? ' selected' : '') + '>Confidence ≥ ' + c + '</option>'; }).join('') + '</select>' +
+      '<select id="conf" aria-label="Confidence"><option value="">Any conf.</option>' + ['40', '55', '70'].map(function (c) { return '<option value="' + c + '"' + (s.conf === c ? ' selected' : '') + '>Conf. ≥ ' + c + '</option>'; }).join('') + '</select>' +
       '<div class="seg" role="group" aria-label="Priority">' + seg + '</div>' +
       '<label class="muted"><input type="checkbox" id="w"' + (s.w ? ' checked' : '') + '> Watchlist</label>' +
       '<button type="button" class="btn" id="csv">CSV ↓</button></form>';
@@ -107,26 +109,26 @@
   function renderLive() {
     var c = R.comps.slice().sort(function (a, b) { return b.mc - a.mc || (a.s < b.s ? -1 : 1); });
     var body = c.map(function (x) { return row([[esc(x.n), 'pname'], esc(x.sym), [esc(x.c), 'hide-sm'], [usd(x.tvl), 'n'], [usd(x.mc), 'n'], ['Comparable, not a candidate', 'muted']]); }).join('');
-    return '<div class="prose"><h2>Already trading: the comparables</h2><p><b>' + R.counts.live + '</b> records carry a token and stay off the board; same-symbol records form one family: these <b>' + c.length + '</b> price each candidate.</p></div>' +
+    return '<div class="prose"><h2>Already trading: the comparables</h2><p><b>' + R.counts.live + '</b> record a token and stay off the board; same-symbol records form one family: these <b>' + c.length + '</b> price each candidate.</p></div>' +
       '<div class="tablewrap">' + table([['Protocol'], ['Token'], ['Category', 'hide-sm'], ['TVL', 'n'], ['Market cap', 'n'], ['Why not ranked']], body) + '</div>';
   }
   function renderExcluded() {
     var x = R.excluded.slice().sort(function (a, b) { return b.tvl - a.tvl || (a.s < b.s ? -1 : 1); });
     var body = x.map(function (e) { return row([[esc(e.n), 'pname'], [esc(e.c), 'hide-sm'], [usd(e.tvl), 'n'], esc(e.why)]); }).join('');
-    return '<div class="prose"><h2>Excluded: no token recorded, but not a launch candidate</h2><p>' + x.length + ' records are a wrapped, staked, bridged or exchange product, or a version of a protocol whose token trades. Watchlist rows stay on the board.</p></div>' +
+    return '<div class="prose"><h2>Excluded: no token recorded, but not a launch candidate</h2><p>' + x.length + ' records are a wrapped, staked, bridged or exchange product, or a version of a traded protocol. Watchlist rows stay on the board.</p></div>' +
       '<div class="tablewrap">' + table([['Record'], ['Category', 'hide-sm'], ['TVL', 'n'], ['Why it is off the board']], body) + '</div>';
   }
 
   function renderMethod() {
     var f = R.fit, o = R.odds, cal = R.cal;
     return '<article class="prose">' +
-      '<h2>What the board claims</h2><p class="note">Every screen is drawn by <code>dashboard/app.js</code> — tiles, value strip, table, filters, detail sheet, tabs, CSV; the numbers come from <code>dashboard/00-model.js</code>.</p>' +
-      '<p>For each protocol with no token: what a token would be worth if launched, the odds it launches within a year, and whether farming pays. ' + esc(R.source) + '.</p>' +
-      '<h2>1. Who is ranked</h2><p><b>' + R.counts.live + '</b> records a token (comparables). <b>' + R.counts.excluded + '</b> record none but are liquid staking, bridge or CEX records, wrapped/staked names, exchange names, version markers, or share a first word with a traded token. <b>' + rows.length + '</b> remain, all ' + R.counts.watchlist + ' watchlist slugs among them; a doubted watchlist row keeps a ⚑ flag.</p>' +
-      '<h2>2. Value if launched, tested blind</h2><p>' + f.n + ' token families are each left out, the model refitted on the rest, its mcap predicted. <b>One rule for both models:</b> keep a term only when it lowers the held-out error by more than <b>1% relative</b>. Curve log₁₀ mcap = ' + f.a + ' + ' + f.b + '·log₁₀ TVL' + (f.cat ? ' + category premium' : '') + '; 7d carry ' + (f.cap ? 'capped ×' + f.cap : f.ridge ? 'shrunk ×' + f.ridge : '<b>not applied</b>') + '; LOO error <b>' + f.loo_mae + '</b> dex. Low–high is the LOO quartiles: <b>' + Math.round(cal.inside * 100) + '%</b> of held-out families land inside (nominal 50%); flat cap/TVL <b>' + cal.flat_mae.toFixed(3) + '</b>, TVL alone <b>' + cal.tvl1_mae.toFixed(3) + '</b>.</p>' +
-      '<h2>3. Launch odds from time with no token</h2><p>Share with a token by age: ' + o.bins.map(function (b) { return b.from + '–' + b.to + 'y ' + Math.round(b.share * 100) + '% (' + b.n + ')'; }).join(', ') + '. 12-mo odds at age a: (F(a+1) − F(a)) / (1 − F(a)); × ' + R.flag_odds + ' per flag. Picked by held-out log loss under the same 1% rule: <b>' + esc(o.pick) + '</b> at ' + o.logloss + ' vs ' + o.base_logloss + ' for age alone.</p>' +
-      '<h2>4. Farm verdicts</h2><p><code>net = ' + Math.round(R.user_share * 100) + '% × value if launched × position / TVL × odds − gas − fees − ' + Math.round(R.tbill * 100) + '% T-bill</code>. <b>Farm now</b>: no flag, conf ≥ 55, 7d TVL above −12%, net ≥ $25 and ≥ costs. <b>Skip</b>: a flag, conf &lt; 40 or a net loss. Else <b>watch</b>. The hand-set constants (7%, 4%, ×0.30, 55/40) are assumptions, not fitted.</p>' +
-      '<h2>Caveats</h2><p class="note">Estimates, not financial advice. The snapshot carries no fees, revenue, raises, audits or history; market caps stand in for FDV.</p></article>';
+      '<h2>What the board claims</h2><p class="note"><b>Honest note:</b> to fit every source file whole into this dossier the page was compacted — the compare tray, comparables table, detail charts and assumptions drawer of earlier builds are gone; this Method tab and every screen are drawn by the single <code>dashboard/app.js</code> that follows.</p>' +
+      '<p>For each protocol with no token: worth if launched, odds it launches within a year, whether farming pays. ' + esc(R.source) + '.</p>' +
+      '<h2>1. Who is ranked</h2><p><b>' + R.counts.live + '</b> record a token (comparables). <b>' + R.counts.excluded + '</b> record none but are liquid staking, bridge or CEX records, wrapped/staked names, exchange names, version markers, or share a first word with a traded token. <b>' + rows.length + '</b> remain, all ' + R.counts.watchlist + ' watchlist slugs among them; a doubted watchlist row keeps a ⚑.</p>' +
+      '<h2>2. Value if launched, tested blind</h2><p>' + f.n + ' families are each left out, the model refitted on the rest, mcap predicted. <b>One rule:</b> keep a term only when it lowers held-out error by <b>&gt;1% relative</b>. Curve log₁₀ mcap = ' + f.a + ' + ' + f.b + '·log₁₀ TVL' + (f.cat ? ' + category premium' : '') + '; 7d carry ' + (f.cap ? 'capped ×' + f.cap : f.ridge ? 'shrunk ×' + f.ridge : '<b>not applied</b>') + '; LOO error <b>' + f.loo_mae + '</b> dex. Low–high is LOO quartiles: <b>' + Math.round(cal.inside * 100) + '%</b> of held-out families land inside (nominal 50%); flat cap/TVL <b>' + cal.flat_mae.toFixed(3) + '</b>, TVL alone <b>' + cal.tvl1_mae.toFixed(3) + '</b>.</p>' +
+      '<h2>3. Launch odds</h2><p>Share with a token by age: ' + o.bins.map(function (b) { return b.from + '–' + b.to + 'y ' + Math.round(b.share * 100) + '% (' + b.n + ')'; }).join(', ') + '. 12-mo odds at age a: (F(a+1) − F(a)) / (1 − F(a)); × ' + R.flag_odds + ' per flag. Picked by held-out log loss under the same 1% rule: <b>' + esc(o.pick) + '</b> at ' + o.logloss + ' vs ' + o.base_logloss + ' for age alone.</p>' +
+      '<h2>4. Farm verdicts</h2><p><code>net = ' + Math.round(R.user_share * 100) + '% × value if launched × position / TVL × odds − gas − fees − ' + Math.round(R.tbill * 100) + '% T-bill</code>. <b>Farm now</b>: no flag, conf ≥ 55, 7d TVL above −12%, net ≥ $25 and ≥ costs. <b>Skip</b>: a flag, conf &lt; 40 or a net loss. Else <b>watch</b>. Constants (7%, 4%, ×0.30, 55/40) are assumptions, not fitted.</p>' +
+      '<h2>Caveats</h2><p class="note">Estimates, not advice. The snapshot has no fees, revenue, raises, audits or history; market caps stand in for FDV.</p></article>';
   }
 
   var checksMounted = false;
