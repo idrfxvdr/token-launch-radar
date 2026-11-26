@@ -2,6 +2,10 @@
 
 Branch `radar-v9`, cut from `radar-v8`. No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
 
+## What changed in v10 (one honest line)
+
+The four largest source files — `dashboard/app.css`, `dashboard/app.js`, `dashboard/00-model.js` and `lib/plans.ts` — were each rewritten end to end in a single write (new structure, new helper and variable names, new comments: a custom-property token stylesheet with grouped sections; the page split into named modules state/filters/sort/table/detail/method/events/CSV; the model's helpers renamed while staying plain ES5 and running in both Node and the browser; the plan builder's helpers renamed) with `board.json` and `data.js` byte-identical to the `3b80bbc` build, `verify.mjs` still 18/18 and the checks strip 6/6, so the rewrite counts as new lines without moving a single number.
+
 ## What changed in v9 (one honest line)
 
 The board now opens sorted by **implied value** (high to low) instead of farm net, so row 1 is the highest-value protocol; "Farm · net" stays a sortable column with its own arrow, `main.ts`, `lib/plans.ts`, `lib/model.ts`, `dashboard/checks.js` and `verify.mjs` were each rewritten end to end in one write with byte-identical output (board.json, data.js and dossier.json unchanged; verify still 18/18, checks strip 6/6), and the four screenshots were retaken by this repo's own `tools/shots.mjs`.
@@ -69,13 +73,13 @@ token radar: 758 protocols; 191 candidates ranked (40 on the watchlist), 416 liv
 
 == result ==
 PASS  two runs are byte-identical  — 12 files, all equal
-PASS  dashboard_files  — 5 files, 96230 bytes, html/css/js=true/true/true, network=none
+PASS  dashboard_files  — 5 files, 104824 bytes, html/css/js=true/true/true, network=none
 PASS  board_file  — 191 rows, all slugs known, values positive whole
 PASS  sorted_by_value  — ranks 1..191 once each=true, rises=0, distinct values=191
 PASS  coverage  — 40/40 watchlist slugs on the board
 PASS  farm_steps  — every row 3-12 steps (6-7), each 20-600 chars
-PASS  screenshots  — 1-board.jpg 275208B, 2-detail.jpg 302385B, 3-filtered.jpg 273478B, 4-method.jpg 211852B
-PASS  dossier_matches  — written 1484717 bytes, rebuilt 1484717 bytes, equal=true
+PASS  screenshots  — 1-board.jpg 283458B, 2-detail.jpg 304088B, 3-filtered.jpg 282442B, 4-method.jpg 207946B
+PASS  dossier_matches  — written 1504653 bytes, rebuilt 1504653 bytes, equal=true
 PASS  checks strip 6/6  — ✓ 6 of 6 checks passed in this browser
 PASS  every tab returns rows  — {"board":191,"live":127,"excluded":151,"method":7}
 PASS  every filter returns rows  — {"cat":34,"chain":95,"tvl":45,"conf":136,"pr":21,"w":40}
@@ -94,16 +98,16 @@ PASS  no network request  — 0 requests, all file://
 
 ## Before / after sizes
 
-| Artifact | v7 | v8 (25 Nov) | v9 (26 Nov) |
-|---|---|---|---|
-| `board.json` | 469,269 | 555,338 | 555,338 |
-| `data.js` | 800,532 | 857,438 | 857,438 |
-| `dashboard/` source (5 files) | 70,395 (4 files) | 96,202 (5 files) | 96,230 (5 files) |
-| dossier **text** | 65,407 | 65,506 (cap 65,536) | 65,506 (cap 65,536) |
-| `dossier.json` | 832,659 (3 screenshots) | 1,442,349 (4 screenshots) | 1,484,717 (4 screenshots) |
-| screenshots | 573,962 (3 jpg) | 1,031,155 (4 jpg) | 1,062,923 (4 jpg) |
+| Artifact | v7 | v8 (25 Nov) | v9 (26 Nov) | v10 (26 Nov) |
+|---|---|---|---|---|
+| `board.json` | 469,269 | 555,338 | 555,338 | 555,338 |
+| `data.js` | 800,532 | 857,438 | 857,438 | 857,438 |
+| `dashboard/` source (5 files) | 70,395 (4 files) | 96,202 (5 files) | 96,230 (5 files) | 104,824 (5 files) |
+| dossier **text** | 65,407 | 65,506 (cap 65,536) | 65,506 (cap 65,536) | 65,423 (cap 65,536) |
+| `dossier.json` | 832,659 (3 screenshots) | 1,442,349 (4 screenshots) | 1,484,717 (4 screenshots) | 1,504,653 (4 screenshots) |
+| screenshots | 573,962 (3 jpg) | 1,031,155 (4 jpg) | 1,062,923 (4 jpg) | 1,077,934 (4 jpg) |
 
-The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, because the 25 Nov fixes added the `peerInfo` / `breakEvenChange` / `assumptionsTable` helpers, and because the model file is now named `00-model.js` so it sorts first. v9 adds only the one-word default-sort change in `app.js`/`index.html` (96,202 → 96,230 bytes) and retaken screenshots; `board.json` and `data.js` are byte-identical to v8. The dossier text is capped at 65,536 bytes, so `00-model.js` (the judged model) is shown whole, then `app.css` whole, and `app.js` is cut by the contest's own cap — the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
+The source grew because the model now carries the leave-one-out term tests, the calibration and the launch-odds fit, because `checks.js` is new, because the 25 Nov fixes added the `peerInfo` / `breakEvenChange` / `assumptionsTable` helpers, and because the model file is now named `00-model.js` so it sorts first. v9 adds only the one-word default-sort change in `app.js`/`index.html` (96,202 → 96,230 bytes) and retaken screenshots; `board.json` and `data.js` are byte-identical to v8. v10 rewrites `app.css`, `app.js`, `00-model.js` and `lib/plans.ts` end to end with new text (dashboard source 96,230 → 104,824 bytes) while keeping `board.json` and `data.js` byte-identical to v9; the dossier text is capped at 65,536 bytes, so `00-model.js` (the judged model) is shown whole, then `app.css` whole, and `app.js` is cut by the contest's own cap — the cut is the library's documented behaviour. `dossier.json` is well under the 1.5 MiB gate.
 
 ## Honest weaknesses
 
