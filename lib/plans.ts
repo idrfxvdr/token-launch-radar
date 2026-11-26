@@ -1,16 +1,17 @@
 // Farm plans: concrete steps, built from each protocol's sector, category, chains, TVL and valuation.
-// Every step says what it costs (capital put to work, gas for the transactions it takes on the chosen chain,
-// fees) and how long it takes, so a reader can price the plan before starting it.
 //
-// The one assumption the plan rests on is stated with it: a launch hands USER_SHARE of the implied value to
-// users, pro rata to their share of TVL over the campaign. So $1,000 deposited is worth roughly
-// USER_SHARE * V * 1000 / TVL at launch, the "per $1k" figure every plan quotes.
+// Every step says what it costs (capital put to work, gas for the transactions it takes on the chosen
+// chain, fees) and how long it takes, so a reader can price the plan before starting it.
+//
+// The one assumption the plan rests on is stated with it: a launch hands USER_SHARE of the implied
+// value to users, pro rata to their share of TVL over the campaign. So $1,000 deposited is worth
+// roughly USER_SHARE * V * 1000 / TVL at launch, the "per $1k" figure every plan quotes.
 
 import { M, type Fitted, type Priority, type Protocol, type Valuation, type Verdict } from './model.ts';
 
 export const USER_SHARE = M.USER_SHARE;
 
-/** One step: what to do, what it costs, how long it takes. */
+/** One step: what to do, what it costs, how long it takes, and when in the campaign it happens. */
 export interface Step { text: string; cost: string; time: string; when?: string; }
 
 export interface Plan {
@@ -37,6 +38,8 @@ export interface Plan {
   risks: string[];
 }
 
+// ---- formatting and small helpers -------------------------------------------------------------
+
 /** Mainnet chains cost far more per transaction than the rest. */
 const MAINNET = new Set(['Ethereum', 'Bitcoin']);
 function pickChain(chains: string[]): string {
@@ -52,10 +55,13 @@ const usd = (n: number) => {
 };
 const big = (n: number) => n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}k` : `$${Math.round(n)}`;
 
+/** The per-protocol facts every step is written from. */
 interface Ctx { p: Protocol; v: Valuation; chain: string; cheap: boolean; gas: number; ticket: number; full: number; weeks: number; per1k: number; c7: number; age: number | null; cat: string; }
 
 /** n transactions on the plan's chain, as dollars. */
 const tx = (x: Ctx, n: number) => `~$${Math.max(1, Math.round(n * x.gas))} gas (${n} tx)`;
+
+// ---- the sector's core actions ----------------------------------------------------------------
 
 /** The sector's core actions: what to deposit, borrow, trade or provide, each with its cost and time. */
 function actions(sector: string, x: Ctx): Step[] {
@@ -120,6 +126,8 @@ function actions(sector: string, x: Ctx): Step[] {
   ];
 }
 
+// ---- the risk and the stop rule ---------------------------------------------------------------
+
 /** The one risk that decides this plan, from the protocol's own record. */
 function mainRisk(p: Protocol, v: Valuation, verdict: Verdict, sector: string, weeks: number): string {
   const cat = p.category ?? 'Uncategorised';
@@ -137,6 +145,8 @@ function stopRule(x: Ctx, f: { slice: number; odds: number; breakeven: number })
   const tail = f.breakeven >= 1 ? `it cannot break even at any odds (the position needs ${(f.breakeven * 100).toFixed(0)}% odds)` : `the model's break-even is ${Math.round(f.breakeven * 100)}% odds`;
   return `Stop if TVL stays under ${big(floor)} (15% below today's ${big(x.p.tvl_usd)}) for two straight weeks, or if no points programme is confirmed within ${x.weeks} weeks: withdraw to the ${usd(x.ticket)} test ticket and wait, because ${tail}.`;
 }
+
+// ---- the plan ---------------------------------------------------------------------------------
 
 export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string, m: Fitted): Plan {
   const chain = pickChain(p.chains);
