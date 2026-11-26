@@ -140,6 +140,7 @@ if (shots.length < 3 || shots.length > 4) shotErr = `${shots.length} images`;
 for (const s of shots) {
   const b = readFileSync(join(shotDir, s));
   if (b.length > 512 * 1024) { shotErr = `${s} is ${b.length} bytes`; break; }
+  if (b.length < 200_000 || b.length > 262_144) { shotErr = `${s} is ${b.length} bytes, outside 200000-262144`; break; }
   const dim = jpegSize(b);
   if (!dim) { shotErr = `${s} is not a whole JPEG`; break; }
   const long = Math.max(dim.w, dim.h), short = Math.min(dim.w, dim.h);
@@ -151,10 +152,11 @@ check('screenshots', !shotErr, shotErr || shots.map((s) => `${s} ${readFileSync(
 const dossierPath = join(A, 'dossier.json');
 const written = readFileSync(dossierPath);
 const rebuilt = buildDossier(A, { text_max_bytes: 65536 });
-// The size guard is a sanity bound, not a rule: four 300-358 KB JPEGs base64 to ~1.6-1.9 MB on their
-// own, so the dossier is necessarily larger than the 1.5 MB this guard used to allow.
-check('dossier_matches', Buffer.from(rebuilt).equals(written) && written.length <= 2.5 * 1024 * 1024,
+check('dossier_matches', Buffer.from(rebuilt).equals(written) && written.length <= 1.5 * 1024 * 1024,
   `written ${written.length} bytes, rebuilt ${rebuilt.length} bytes, equal=${Buffer.from(rebuilt).equals(written)}`);
+// the judge's own size gate: four screenshots base64 inside the JSON must still fit 1,500,000 bytes
+check('dossier.json is at most 1,500,000 bytes', written.length <= 1_500_000,
+  `${written.length} bytes, headroom ${1_500_000 - written.length}`);
 
 // every dashboard file must appear WHOLE in the dossier text: no "[Cut at …" line and each file's
 // bytes found verbatim. The text cap is the contest's, so this proves the source is not truncated.
