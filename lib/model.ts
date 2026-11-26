@@ -1,6 +1,7 @@
-// Typed access to the model in dashboard/00-model.js. The model lives in the dashboard so the page runs the very
-// code that wrote board.json (and the judge reads it); Node evaluates the same classic script here, which sets
-// globalThis.RadarModel.
+// Typed access to the model in dashboard/00-model.js.
+//
+// The model lives in the dashboard so the page runs the very code that wrote board.json (and the judge
+// reads it). Node evaluates the same classic script here, which sets globalThis.RadarModel.
 
 import '../dashboard/00-model.js';
 
@@ -43,6 +44,7 @@ interface RadarModel {
 
 export const M = (globalThis as unknown as { RadarModel: RadarModel }).RadarModel;
 
+/** Parse the sealed snapshot and check it has the two arrays the build reads. */
 export function parseSnapshot(text: string): Snapshot {
   const raw = JSON.parse(text) as Snapshot;
   if (!Array.isArray(raw.protocols) || !Array.isArray(raw.watchlist)) throw new Error('snapshot: protocols and watchlist must be arrays');
