@@ -1,10 +1,12 @@
+// checks.js — the live "checked in this browser" strip: six checks recomputed from window.RADAR.
 (function (root) {
   'use strict';
   var el = null, state = { done: false, checks: [] };
+
   function bySlug() { var m = {}; root.RADAR.snapshot.protocols.forEach(function (p) { m[p.slug] = p; }); return m; }
   function result(id, label, n, of, detail, extra) { return { id: id, label: label, n: n, of: of, passed: n === of && of > 0, detail: detail, extra: extra || '' }; }
 
-  /* 1. the model, re-run here, reproduces every value the board was written with */
+  /* 1. the model re-run reproduces every board value here. */
   function values() {
     var R = root.RADAR, M = root.RadarModel, prot = bySlug(), v = M.classify(R.snapshot), f = M.fit(R.snapshot, v), ok = 0, bad = [];
     R.rows.forEach(function (r) {
@@ -14,7 +16,7 @@
       if (x.base === r.b && x.low === r.lo && x.high === r.hi) ok++; else bad.push(r.s);
     });
     return result('values', '00-model.js re-run reproduces every board value', ok, R.rows.length,
-      'classify() + fit() + value() ran again on the ' + R.snapshot.protocols.length + ' snapshot records in this browser: ' + ok + ' of ' + R.rows.length + ' rows match the board on implied value, low and high.' + (bad.length ? ' Misses: ' + bad.slice(0, 4).join(', ') : ' No row differs.'),
+      'classify() + fit() + value() ran again on the ' + R.snapshot.protocols.length + ' snapshot records in this browser: ' + ok + ' of ' + R.rows.length + ' rows match on implied value, low and high.' + (bad.length ? ' Misses: ' + bad.slice(0, 4).join(', ') : ' No row differs.'),
       'Fitted here: log₁₀ value = ' + f.a + ' + ' + f.b + '·log₁₀ TVL, leave-one-out error ' + f.loo_mae + ' dex on ' + f.n + ' traded-token families.');
   }
   /* 2. every watchlist slug is on the board */
@@ -24,7 +26,7 @@
     R.snapshot.watchlist.forEach(function (s) { if (!have[s]) miss.push(s); });
     var flagged = R.rows.filter(function (r) { return r.w; }).length;
     return result('watchlist', 'watchlist coverage', R.snapshot.watchlist.length - miss.length, R.snapshot.watchlist.length,
-      'The snapshot names ' + R.snapshot.watchlist.length + ' watchlist protocols; ' + (R.snapshot.watchlist.length - miss.length) + ' are ranked on the board, ' + flagged + ' marked WL.' + (miss.length ? ' Missing: ' + miss.join(', ') : ' Every slug is present.'));
+      'The snapshot names ' + R.snapshot.watchlist.length + ' watchlist protocols; ' + (R.snapshot.watchlist.length - miss.length) + ' are ranked, ' + flagged + ' marked WL.' + (miss.length ? ' Missing: ' + miss.join(', ') : ' Every slug is present.'));
   }
   /* 3. ranks 1..N, value never rising */
   function ranks() {
@@ -32,16 +34,16 @@
     rows.forEach(function (r, i) { if (r.r !== i + 1 || seen[r.r]) bad++; seen[r.r] = 1; if (i && r.b > rows[i - 1].b) rise++; });
     var n = rows.length - Math.min(rows.length, bad + rise);
     return result('ranks', 'ranks are 1..N and value never rises', n, rows.length,
-      rows.length + ' rows carry ranks 1 to ' + rows.length + ' once each (' + bad + ' breaks); implied value is non-increasing from rank 1 (' + rise + ' rises).');
+      rows.length + ' rows carry ranks 1 to ' + rows.length + ' once each (' + bad + ' breaks); value is non-increasing (' + rise + ' rises).');
   }
   /* 4. no ranked row records a token */
   function noToken() {
     var R = root.RADAR, prot = bySlug(), bad = [];
     R.rows.forEach(function (r) { var p = prot[r.s]; if (!p || p.gecko_id !== null || p.symbol !== null || p.mcap_usd !== null) bad.push(r.s); });
     return result('no-token', 'no ranked row records a token', R.rows.length - bad.length, R.rows.length,
-      'Each row\'s snapshot record is read again: gecko_id, symbol and mcap_usd must all be null.' + (bad.length ? ' Token recorded: ' + bad.slice(0, 4).join(', ') : ' The ' + R.comps.length + ' traded families are priced in Already trading, not ranked.'));
+      'Each row\'s record is read again: gecko_id, symbol and mcap_usd must all be null.' + (bad.length ? ' Token recorded: ' + bad.slice(0, 4).join(', ') : ' The ' + R.comps.length + ' traded families are priced in Already trading, not ranked.'));
   }
-  /* 5. every plan has 3-12 steps, each with a cost and a time */
+  /* 5. every plan has 3-12 steps, each with a cost and time */
   function plans() {
     var R = root.RADAR, bad = [], min = 99, max = 0;
     R.rows.forEach(function (r) {
@@ -51,9 +53,9 @@
       if (!r.mr || !r.sr) bad.push(r.s + ' (risk or stop rule)');
     });
     return result('plans', 'every plan has 3-12 steps with a cost and a time', R.rows.length - Math.min(R.rows.length, bad.length), R.rows.length,
-      'Steps per plan run ' + min + ' to ' + max + '; every step carries Cost and Time, every row one main risk and a stop rule.' + (bad.length ? ' Faults: ' + bad.slice(0, 3).join('; ') : ' No plan is missing one.'));
+      'Steps per plan run ' + min + ' to ' + max + '; every step carries Cost and Time, every row a main risk and stop rule.' + (bad.length ? ' Faults: ' + bad.slice(0, 3).join('; ') : ' No plan is missing one.'));
   }
-  /* 6. each tab's row count equals the number in its label */
+  /* 6. each tab's label equals its row count */
   function tabs() {
     var R = root.RADAR, want = { board: R.rows.length, live: R.comps.length, excluded: R.excluded.length, method: 7 }, bad = [], seen = 0;
     [].forEach.call(document.querySelectorAll('.tabs a'), function (a) {
@@ -64,7 +66,7 @@
       if (w !== n) bad.push(a.dataset.view + ': label ' + n + ', ' + w + ' rows');
     });
     return result('tabs', 'every tab holds the number of rows its label says', seen - bad.length, seen,
-      'Board ' + want.board + ', Already trading ' + want.live + ' families, Excluded ' + want.excluded + ', Method ' + want.method + ' sections; each header label is read back and compared.' + (bad.length ? ' ' + bad.join('; ') : ' Every label matches.'));
+      'Board ' + want.board + ', Already trading ' + want.live + ' families, Excluded ' + want.excluded + ', Method ' + want.method + ' sections; each label is read back and compared.' + (bad.length ? ' ' + bad.join('; ') : ' Every label matches.'));
   }
 
   function run() {
