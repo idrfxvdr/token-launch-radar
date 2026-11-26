@@ -9,7 +9,7 @@
 // there over file://, and writes 1440x1260 JPEGs into this repository's screenshots/.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pw from '/root/makefun/tools/node_modules/playwright/index.js';
@@ -37,12 +37,14 @@ const outDir = join(here, 'screenshots');
 mkdirSync(outDir, { recursive: true });
 
 // 2. the four views the rules expect: board, one detail, a filtered view, the method.
-// Each view gets the JPEG quality that lands its file in the 300-358 KB band at 1440x1260.
+// The dossier keeps four JPEGs, so each has to be smaller than the 3-shot rule's 300-350 KB hint:
+// every file must land in [MIN, MAX] bytes. Quality is stepped down from Q_HIGH by code until it does.
+const MIN = 200_000, MAX = 262_144, Q_HIGH = 95, Q_LOW = 60;
 const plan = [
-  { name: '1-board.jpg', hash: '#view=board', q: 91 },
-  { name: '2-detail.jpg', hash: '#view=board&p=steakhouse-financial', q: 99 },
-  { name: '3-filtered.jpg', hash: '#view=board&w=1&conf=40&sort=net&dir=desc', q: 91 },
-  { name: '4-method.jpg', hash: '#view=method', q: 99 },
+  { name: '1-board.jpg', hash: '#view=board' },
+  { name: '2-detail.jpg', hash: '#view=board&p=steakhouse-financial' },
+  { name: '3-filtered.jpg', hash: '#view=board&w=1&conf=40&sort=net&dir=desc' },
+  { name: '4-method.jpg', hash: '#view=method' },
 ];
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox', '--disable-dev-shm-usage', '--hide-scrollbars', '--force-device-scale-factor=1'] });
@@ -58,8 +60,16 @@ for (const s of plan) {
   }, { timeout: 30000 });
   await page.waitForTimeout(400);
   const file = join(outDir, s.name);
-  await page.screenshot({ path: file, type: 'jpeg', quality: s.q });
-  process.stdout.write(`${s.name} ${statSync(file).size}B\n`);
+  // step the quality down until the JPEG fits the band; the first fit from above is the sharpest one
+  let shot = null, used = 0;
+  for (let q = Q_HIGH; q >= Q_LOW; q--) {
+    const buf = await page.screenshot({ type: 'jpeg', quality: q });
+    if (buf.length <= MAX) { shot = buf; used = q; break; }
+  }
+  if (!shot) { process.stderr.write(`shots: ${s.name} is still over ${MAX} bytes at quality ${Q_LOW}\n`); process.exit(1); }
+  if (shot.length < MIN) { process.stderr.write(`shots: ${s.name} is ${shot.length} bytes at quality ${used}, under ${MIN}\n`); process.exit(1); }
+  writeFileSync(file, shot);
+  process.stdout.write(`${s.name} quality ${used} ${shot.length}B\n`);
 }
 
 await browser.close();
