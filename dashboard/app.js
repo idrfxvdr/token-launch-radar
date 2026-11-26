@@ -33,7 +33,7 @@
   var PR = { 'farm now': 'now', watch: 'watch', skip: 'skip' }, PR_ORDER = { 'farm now': 0, watch: 1, skip: 2 };
   function pill(p) { return '<span class="pill ' + PR[p] + '">' + esc(p) + '</span>'; }
 
-  var DEF = { view: 'board', q: '', cat: '', chain: '', tvl: '', conf: '', pr: '', w: '', sort: 'net', dir: 'desc', p: '', cmp: '', asm: '', g: '', o: '', sh: '' };
+  var DEF = { view: 'board', q: '', cat: '', chain: '', tvl: '', conf: '', pr: '', w: '', sort: 'b', dir: 'desc', p: '', cmp: '', asm: '', g: '', o: '', sh: '' };
   function read() {
     var s = Object.assign({}, DEF), h = new URLSearchParams(location.hash.slice(1));
     Object.keys(DEF).forEach(function (k) { if (h.has(k)) s[k] = h.get(k); });
@@ -195,7 +195,7 @@
     var a = assumptions(s), list = sorted(filtered(s), s, a), picked = (s.cmp || '').split(',').filter(Boolean);
     var body = list.map(function (r) { return rowHtml(r, a, picked.indexOf(r.s) >= 0); }).join('');
     return kpis() + strip() + '<div id="checks" class="checks run" aria-live="polite"></div>' + toolbar(s) + chips(s, list.length) +
-      '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols, sorted by net; the # column is the implied-value rank</caption><thead><tr>' +
+      '<div class="tablewrap"><table><caption class="sr" hidden>Pre-token protocols, sorted by implied value; the # column is the implied-value rank</caption><thead><tr>' +
       th(s, 'r', '#', 'n') + th(s, 'n', 'Protocol') + th(s, 'c', 'Category', 'hide-sm') + th(s, 'ch', 'Chains', 'hide-md') +
       th(s, 'tvl', 'TVL · 7d', 'n') + th(s, 'od', '12-mo odds · age', 'n hide-sm') + th(s, 'b', 'Implied value = if launched × odds') +
       th(s, 'conf', 'Conf.', 'n hide-sm') + th(s, 'net', 'Farm · net') + '<th scope="col" class="cmp">±</th>' +
@@ -367,7 +367,7 @@
   var checksMounted = false;
   function render() {
     var s = read(), focusId = document.activeElement && document.activeElement.id;
-    document.getElementById('asof').textContent = 'Snapshot ' + R.as_of + ' · ' + rows.length + ' pre-token candidates, sorted by net';
+    document.getElementById('asof').textContent = 'Snapshot ' + R.as_of + ' · ' + rows.length + ' pre-token candidates, sorted by implied value';
     app.innerHTML = s.view === 'live' ? live() : s.view === 'excluded' ? excluded() : s.view === 'method' ? method() : board(s);
     var TABS = { board: ['Board', rows.length], live: ['Already trading', R.comps.length], excluded: ['Excluded', R.excluded.length], method: ['Method', 7] };
     [].forEach.call(document.querySelectorAll('.tabs a'), function (t) {
