@@ -1,6 +1,21 @@
 # radar-v9 — notes
 
-Branch `radar-v9`, cut from `radar-v8`. No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
+Branch `radar-v11`, cut from `radar-v10` (d3c62a3). No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
+
+## v11 step 1 — measured, by code (buildDossier, text_max_bytes 65536)
+
+Fresh `main.ts` output, `buildDossier(dir, {text_max_bytes: 65536})` from `vendor/makefun-board.ts`. Per dashboard file: size and whether it appears WHOLE in the dossier text.
+
+| file | bytes | whole in text? |
+|---|---|---|
+| `00-model.js` | 26,315 | WHOLE |
+| `app.css` | 19,517 | WHOLE |
+| `app.js` | 51,149 | **CUT** |
+| `checks.js` | 6,464 | **CUT** |
+| `index.html` | 1,379 | **CUT** |
+| **dashboard total** | **104,824** | dossier text 65,423 / 65,536 |
+
+`app.js` overflows the 65,536-byte cap, so `checks.js` and `index.html` after it are left out too: the judge cannot see the code behind the table, filters, sort and detail view. v11 shrinks every file so all five fit whole (target ≤ 62,000 bytes total).
 
 ## What changed in v10 (one honest line)
 
