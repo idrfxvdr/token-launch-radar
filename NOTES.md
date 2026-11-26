@@ -4,7 +4,7 @@ Branch `radar-v9`, cut from `radar-v8`. No push, no submit, no pin. Everything b
 
 ## What changed in v9 (one honest line)
 
-The board now opens sorted by **implied value** (high to low) instead of farm net, so row 1 is the highest-value protocol; "Farm · net" stays a sortable column with its own arrow, `main.ts` was rewritten end to end with byte-identical output, and the four screenshots were retaken by this repo's own `tools/shots.mjs`.
+The board now opens sorted by **implied value** (high to low) instead of farm net, so row 1 is the highest-value protocol; "Farm · net" stays a sortable column with its own arrow, `main.ts`, `lib/plans.ts`, `lib/model.ts`, `dashboard/checks.js` and `verify.mjs` were each rewritten end to end in one write with byte-identical output (board.json, data.js and dossier.json unchanged; verify still 18/18, checks strip 6/6), and the four screenshots were retaken by this repo's own `tools/shots.mjs`.
 
 ## What this entry is
 
