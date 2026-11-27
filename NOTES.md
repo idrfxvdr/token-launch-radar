@@ -1,6 +1,16 @@
-# radar-v11 — notes
+# radar-v12 — notes
 
-Branch `radar-v11`, cut from `radar-v10` (d3c62a3). No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
+Branch `radar-v12`, cut from `radar-v11` (2439c2f). No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
+
+## v12 gap review
+
+Read as the judge reads it — four screenshots, then the dashboard source — against the five sealed criteria and the three public titles at 0.963-0.967 ("every value term fitted and tested held-out", "every plan costed on its own chain", "dated farm schedules with cost, hours, capital"). Where we stand: v10 is 0.953 [0.939, 0.967]. The first criterion where a strict judge would separate us from those three is **criterion 2**, then **criterion 3**. The three weakest points, with the function each lives in:
+
+1. **The value terms are computed but never shown with their numbers and weights** — `renderStrip` (`dashboard/app.js`) prints the curve as `10^(a + b·log₁₀ TVL)` with `a = 2.951`, `b = 0.531` and stops there; `rowHtml` prints only the final value. The per-term numbers already exist — `scoreCandidate` (`dashboard/00-model.js`) returns `terms = {curve, log_tvl, carry, premium, odds_logit, age, c7}` and `main.ts` ships them as `r.t` — but no screen renders them. So the page never shows that 7-day growth and days-without-a-token were *tested* (the fit's own `tests` table: 7d 0.687/0.683/0.673/0.674 dex against 0.672 for TVL alone; time 0.677; category 0.669, a 0.45% gain under the 1% rule) and rejected, while the odds model keeps age + TVL (0.538 log loss against 0.547 for age alone). Against "every value term fitted and tested held-out" that is the widest gap we have.
+2. **Plan steps carry no chain and no capital, and the schedule is four coarse buckets** — `plan()` and `coreActions()` (`lib/plans.ts`) choose one chain per plan and write `Cost:` and `Time:` into every step, but the chain a step runs on and the capital that step needs are only in the plan-level `chain` / `capital` fields, and `when` is just `Day 0` / `Days 1-7` / `Weeks 1-N` / `Days 7-14`. `detail()` (`dashboard/app.js`) shows `Gas & fees` and `Hands` as two facts among twelve, never a total cost, a total hours and a dated schedule read together. Against "dated farm schedules with cost, hours, capital" that is the second gap.
+3. **The board states a formula it does not evidence, so code and screenshot cannot be checked against each other** — `renderStrip` prints `LOO 0.672 dex, 127 families` with nothing to compare it to, and `renderKpis` has no fit tile, so a reader cannot tell from the page that 0.672 beats a flat cap/TVL multiple (0.748) or TVL alone (0.931), which is the one number that makes the model a model. Criterion 1 says the screenshots and the code must agree; the code says the fit was tested, the screenshot does not.
+
+What is already strong and must not be lost: the board covers 40/40 watchlist slugs and 191 candidates (criterion 1), traded tokens are kept in their own labelled tab (criterion 2's separation), every column sorts, every filter works, the detail sheet opens per row (criterion 4), and the palette, spacing and type are one system in two themes (criterion 5).
 
 ## v11 fix — the judge's gate refused the first v11, and why
 
