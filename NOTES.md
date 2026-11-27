@@ -2,6 +2,21 @@
 
 Branch `radar-v12`, cut from `radar-v11` (2439c2f). No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
 
+## v12 step 2 — the value model, term by term, on the board and in the detail
+
+Criterion 2 was the widest gap: the fit tested every term but the page showed only the two constants. Now `renderStrip` (`dashboard/app.js`) prints the formula with the row-1 numbers and each weight, and `detail()` adds a **Value terms** card whose four columns are the term, this row's number, its weight, and *why this weight* — the last read from `fit.why`, which `main.ts` computes from this snapshot's own held-out tests (so the page and NOTES cannot disagree). The same lines, by code, from the v12 build:
+
+```
+TVL           b = 0.531 on log10 TVL, the only size term kept: 0.672 dex held-out over 127 families,
+              against 0.748 for a flat cap/TVL multiple and 0.931 for TVL with no curve
+7d growth     0: fitted four ways (0.687, 0.683, 0.673, 0.674 dex), none beats 0.672, so its weight is zero
+Days w/o token 0.86 on years without a token in the launch odds: age + TVL scores 0.538 log loss against
+              0.547 for age alone
+Category      0: a category premium reaches 0.669 dex, 0.4% better than 0.672, under the 1% rule
+```
+
+Row #1 (Steakhouse Financial) as the card renders it: TVL $2.75B → log₁₀ 9.44, weight b 0.531; 7d −2.2% → ×1, weight 0; 1.5y → 51%, weight c 0.86. No name lists: every weight is a fitted coefficient or a tested zero, and the traded tokens stay in their own labelled tab (`renderLive`).
+
 ## v12 gap review
 
 Read as the judge reads it — four screenshots, then the dashboard source — against the five sealed criteria and the three public titles at 0.963-0.967 ("every value term fitted and tested held-out", "every plan costed on its own chain", "dated farm schedules with cost, hours, capital"). Where we stand: v10 is 0.953 [0.939, 0.967]. The first criterion where a strict judge would separate us from those three is **criterion 2**, then **criterion 3**. The three weakest points, with the function each lives in:

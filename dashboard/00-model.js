@@ -1,5 +1,5 @@
-/* Token Launch Radar — the model. Every number on the board comes from here; main.ts runs this file under
-   Node to emit board.json and the browser runs the same file on the raw snapshot (checks.js). Plain ES5. */
+/* Token Launch Radar — the model: every number on the board comes from here. main.ts runs this file under
+   Node to emit board.json; the browser runs the same file on the raw snapshot (checks.js). Plain ES5. */
 (function (root) {
   'use strict';
 

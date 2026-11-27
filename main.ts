@@ -129,6 +129,17 @@ checkPlansDistinct();
 
 // ---- the dashboard's dataset (short keys keep data.js small) ----------------------------------
 
+// Why each weight is what it is, read off this snapshot's own held-out tests: the number the page shows
+// beside every term, and the same lines printed in NOTES.md.
+const applied = model.tests.find((t) => t.applied)!;
+const better = (mae: number) => `${((1 - mae / applied.mae) * 100).toFixed(1)}%`;
+const fitWhy = {
+  tvl: `b = ${model.b} on log10 TVL, the only size term kept: ${applied.mae} dex held-out over ${model.n} families, against ${model.cal.flat_mae} for a flat cap/TVL multiple and ${model.cal.tvl1_mae} for TVL with no curve`,
+  c7: `0: 7d growth was fitted four ways (${model.tests.filter((t) => /7d/.test(t.name)).map((t) => t.mae).join(', ')} dex) and none beats ${applied.mae}, so its weight is zero`,
+  age: `${model.odds.c1} on years without a token in the launch odds: age + TVL scores ${model.odds.logloss} log loss against ${model.odds.base_logloss} for age alone`,
+  cat: `0: a category premium reaches ${model.tests.find((t) => /category/.test(t.name))!.mae} dex, ${better(model.tests.find((t) => /category/.test(t.name))!.mae)} better than ${applied.mae}, under the 1% rule`,
+};
+
 const radar = {
   as_of: snap.as_of,
   source: snap.source,
@@ -140,7 +151,7 @@ const radar = {
     live: Object.values(verdicts).filter((x) => x.status === 'live').length,
     excluded: Object.values(verdicts).filter((x) => x.status === 'excluded').length,
   },
-  fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.cat, cap: model.cap, ridge: model.ridge },
+  fit: { a: model.a, b: model.b, n: model.n, loo_mae: model.loo_mae, feats: model.feats, use_cat: model.cat, cap: model.cap, ridge: model.ridge, why: fitWhy },
   tests: model.tests.map((t) => ({ name: t.name, mae: t.mae, hit: t.hit, applied: !!t.applied })),
   cal: model.cal,
   odds: { c0: model.odds.c0, c1: model.odds.c1, c2: model.odds.c2, c3: model.odds.c3, feats: model.odds.feats, n: model.odds.n, bins: model.odds.bins, pick: model.odds.pick, logloss: model.odds.logloss, base_logloss: model.odds.base_logloss,
@@ -158,7 +169,7 @@ const radar = {
     at: p.listed_at, age: v.age, w: house.has(p.slug) ? 1 : 0, lo: v.low, b: v.base, hi: v.high, ifl: v.ifl, od: v.odds, cy: v.carry, m: v.multiple, conf: v.confidence,
     cp: v.parts, t: v.terms, cd: v.cat_detail, sp: v.spread, dr: v.drivers, why: verdicts[p.slug]!.reason, fl: verdicts[p.slug]!.flags,
     pr: f.priority, pw: f.why, k1: f.per_1k, cap: f.capital, wk: f.weeks, chain: f.chain, gas: f.gas, tc: f.total_cost, hr: f.hours, fee: f.fees, dp: f.drop, net: f.net, sl: f.slice, oh: f.odds, tb: f.tbill, be: f.breakeven,
-    st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? ""]), rk: f.risks, mr: f.main_risk, sr: f.stop_rule,
+    st: f.steps.map((x) => [x.text, x.cost, x.time, x.when ?? "", x.chain ?? "", x.capital ?? ""]), rk: f.risks, mr: f.main_risk, sr: f.stop_rule,
   })),
   comps: model.comps.map((c) => ({ s: c.slug, n: c.name, c: c.category ?? 'Uncategorised', sec: M.sectorOf(c.category), sym: c.symbol, rec: c.records, tvl: c.tvl, mc: c.mcap, x: c.multiple, e: c.resid })),
   excluded: snap.protocols.filter((p) => verdicts[p.slug]!.status === 'excluded')

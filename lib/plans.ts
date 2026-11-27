@@ -11,8 +11,9 @@ import { M, type Fitted, type Priority, type Protocol, type Valuation, type Verd
 
 export const USER_SHARE = M.USER_SHARE;
 
-/** A single step: what to do, what it costs, how long it takes, and when in the campaign it falls. */
-export interface Step { text: string; cost: string; time: string; when?: string; }
+/** A single step: what to do, what it costs, how long it takes, and — filled in by plan() for every step,
+ *  so no step ships without them — which chain it runs on and the capital it needs. */
+export interface Step { text: string; cost: string; time: string; when?: string; chain?: string; capital?: string; }
 
 export interface Plan {
   priority: Priority;
@@ -177,9 +178,14 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
       ? { text: `Move early: TVL rose ${c7.toFixed(1)}% in 7 days, so the points pool is diluting fast; set the full ${money(full)} position inside the first week.`, cost: gasLine(x, 2), time: '15 min' }
       : { text: `Scale from the ${money(ticket)} test ticket to ${money(full)} once a first small withdrawal clears, so the exit path is tested before the money is.`, cost: gasLine(x, 3), time: '15 min' });
 
-  // When each step happens: the first two on day 0, the protocol's actions in the first week, the hold through the horizon.
-  const when = ['Day 0', 'Day 0'];
-  steps.forEach((st, i) => { st.when = i < 2 ? when[i] : i === steps.length - 1 ? 'Days 7-14' : i === steps.length - 2 ? `Weeks 1-${weeks}` : 'Days 1-7'; });
+  // When each step happens, on which chain, and with how much capital: a dated schedule from day 0 to
+  // the end of the horizon, so the reader can price each step before starting it.
+  const sched = ['Day 0', 'Day 0', 'Day 1', 'Day 3', `Weeks 1-${weeks}`, 'Days 7-14'];
+  steps.forEach((st, i) => {
+    st.when = sched[i] ?? `Weeks 1-${weeks}`;
+    st.chain = i === 0 ? 'any chain' : chain;
+    st.capital = i === 0 ? '$0' : i === 1 ? money(ticket) : i >= steps.length - 2 ? money(full) : `${money(ticket)}-${money(full)}`;
+  });
 
   const txs = steps.reduce((s, st) => s + [...st.cost.matchAll(/\((\d+) tx\)/g)].reduce((a, m) => a + Number(m[1]), 0), 0);
   // Running fees the sector's actions carry over the horizon: perp trading fees, swap fees, borrow interest.
