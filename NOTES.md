@@ -2,6 +2,23 @@
 
 Branch `radar-v12`, cut from `radar-v11` (2439c2f). No push, no submit, no pin. Everything below is checked by `verify.mjs`, whose true output is pasted at the end.
 
+## v12 step 3 — every plan step costed on its own chain, with capital, hours and a date
+
+Criterion 3 was the second gap: the chain and the capital lived only in plan-level fields and the schedule was four coarse buckets. Now `plan()` (`lib/plans.ts`) fills every step with `chain`, `capital` and a dated `when` (`Day 0`, `Day 0`, `Day 1`, `Day 3`, `Weeks 1-N`, `Days 7-14`), `stepText` writes `Chain:` and `Capital:` into the board string beside `Cost:` and `Time:`, and `detail()` (`dashboard/app.js`) prints each step as *date · chain · capital · cost · time* plus a total line (`Total ~$tc · ~hr h · wk wk · Day 0 → …`). `main.ts` ships the six fields as `r.st`, and `verify.mjs` gained `plan_steps` — **all 191 rows, 1,159 steps: each carries chain, capital, cost, time and a date** (21/21).
+
+Row #1 (Steakhouse Financial), as the detail sheet renders it — total **~$6 gas and fees · ~3.1 h · 12 wk · Day 0 → Days 7-14**:
+
+```
+Day 0      any chain  $0          $0                                   10 min
+Day 0      Base       $250        $1-$5 bridge fee                     15 min
+Day 1      Base       $250-$6k    $6k deposited + ~$1 gas (2 tx)       15 min
+Day 3      Base       $250-$6k    ~$1 gas (2 tx)                       10 min
+Weeks 1-12 Base       $6k         ~$1 gas (3 tx) monthly top-ups       10 min a week, 2 h in all
+Days 7-14  Base       $6k         ~$1 gas (3 tx)                       15 min
+```
+
+Gas is the snapshot's own per-chain figure (`about $0.30 a transaction on Base`), capital is the plan's ticket→full range, and the dates run from day 0 to the end of the 12-week horizon. No slogans: every step is an action with a price and a clock.
+
 ## v12 step 2 — the value model, term by term, on the board and in the detail
 
 Criterion 2 was the widest gap: the fit tested every term but the page showed only the two constants. Now `renderStrip` (`dashboard/app.js`) prints the formula with the row-1 numbers and each weight, and `detail()` adds a **Value terms** card whose four columns are the term, this row's number, its weight, and *why this weight* — the last read from `fit.why`, which `main.ts` computes from this snapshot's own held-out tests (so the page and NOTES cannot disagree). The same lines, by code, from the v12 build:

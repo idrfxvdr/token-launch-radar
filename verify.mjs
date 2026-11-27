@@ -119,6 +119,25 @@ for (const r of rows) {
 }
 check('farm_steps', !stepErr, stepErr || `every row 3-12 steps (${minS}-${maxS}), each 20-600 chars`);
 
+// plan_steps — criterion 3: every plan step carries its chain, capital, cost and time, and a date
+let planErr = null, planSteps = 0;
+{
+  const g = { window: {} };
+  new Function('window', readFileSync(join(A, 'data.js'), 'utf8'))(g.window);
+  const R = g.window.RADAR;
+  for (const r of R.rows) {
+    if (!Array.isArray(r.st) || r.st.length < 3) { planErr = `${r.slug}: no steps`; break; }
+    for (const st of r.st) {
+      planSteps++;
+      if (!Array.isArray(st) || st.length < 6) { planErr = `${r.slug}: a step with ${st && st.length} fields`; break; }
+      const [text, cost, time, when, chain, capital] = st;
+      if (!text || !cost || !time || !when || !chain || !capital) { planErr = `${r.slug}: a step missing text/cost/time/date/chain/capital`; break; }
+    }
+    if (planErr) break;
+  }
+}
+check('plan_steps', !planErr, planErr || `all ${rows.length} rows, ${planSteps} steps: each carries chain, capital, cost, time and a date`);
+
 // screenshots
 const shotDir = join(A, 'screenshots');
 const shots = readdirSync(shotDir).filter((n) => !n.startsWith('.')).sort();

@@ -225,7 +225,7 @@ export function plan(p: Protocol, v: Valuation, verdict: Verdict, sector: string
     gas: cheap ? `about $${gas.toFixed(2)} a transaction on ${chain}` : `about $${gas} a transaction on ${chain}`, steps, risks };
 }
 
-/** A step as one board string: what to do, then its cost and time. */
+/** A step as one board string: what to do, the chain it runs on, the capital it needs, then its cost and time. */
 export function stepText(s: Step): string {
-  return `${s.when === undefined ? '' : `${s.when}: `}${s.text} Cost: ${s.cost}. Time: ${s.time}.`;
+  return `${s.when === undefined ? '' : `${s.when}: `}${s.text} Chain: ${s.chain ?? 'any chain'}. Capital: ${s.capital ?? '$0'}. Cost: ${s.cost}. Time: ${s.time}.`;
 }
